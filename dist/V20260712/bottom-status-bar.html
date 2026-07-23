@@ -11480,23 +11480,17 @@ ${CHARACTER_PROFILE_FORMAT_SAMPLE.trim()}
       const applyAmberMapFrameToDom = () => {
         const frame = document.getElementById('statusbar-world-map-frame');
         if (!frame) return;
-        const worldviewMode = String(frame.dataset.worldviewMode || '').trim();
-        const isEmbedMode = worldviewMode === 'amber' || worldviewMode === 'daming' || worldviewMode === 'dragon';
-        if (!isEmbedMode) {
-          if (frame.srcdoc) frame.srcdoc = '';
-          const fallbackSrc = String(frame.dataset.mapSrc || '').trim();
-          if (fallbackSrc && frame.getAttribute('src') !== fallbackSrc) frame.setAttribute('src', fallbackSrc);
-          return;
-        }
+        const frameSrc = String(frame.dataset.mapSrc || '').trim();
+        const hasHydratedSrcdocForFrame = !!_amberMapEmbedSrcdoc && _amberMapHydratedUrl === frameSrc;
 
-        if (_amberMapEmbedSrcdoc) {
+        if (hasHydratedSrcdocForFrame) {
           if (frame.getAttribute('src') !== 'about:blank') frame.setAttribute('src', 'about:blank');
           if (frame.srcdoc !== _amberMapEmbedSrcdoc) frame.srcdoc = _amberMapEmbedSrcdoc;
           return;
         }
 
         if (frame.srcdoc) frame.srcdoc = '';
-        const directSrc = String(_amberMapDirectUrl || frame.dataset.mapSrc || '').trim() || 'about:blank';
+        const directSrc = String((_amberMapHydratedUrl === frameSrc && _amberMapDirectUrl) || frameSrc || '').trim() || 'about:blank';
         if (frame.getAttribute('src') !== directSrc) frame.setAttribute('src', directSrc);
       };
 
@@ -11686,19 +11680,14 @@ ${CHARACTER_PROFILE_FORMAT_SAMPLE.trim()}
         const isEmbedWorldview = isAmberWorldview || isDamingWorldview || isDragonWorldview;
         const dungeonIframeSrc = dungeonMapDebugUrl;
         const mapIframeSrc = resolveWorldviewMapSrc(\u4E16\u754C\u89C2);
-        if (isEmbedWorldview) {
-          ensureAmberMapEmbedReady(mapIframeSrc);
-        }
+        ensureAmberMapEmbedReady(mapIframeSrc);
         if (isSaoWorldview) {
           ensureDungeonMapEmbedReady(dungeonIframeSrc);
         }
-        const shouldUseAmberDirectSrc = isEmbedWorldview
-          && _amberMapHydratedUrl === mapIframeSrc
+        const shouldUseWorldMapDirectSrc = _amberMapHydratedUrl === mapIframeSrc
           && !_amberMapEmbedSrcdoc
           && _amberMapDirectUrl === mapIframeSrc;
-        const renderedMapSrc = isEmbedWorldview
-          ? (shouldUseAmberDirectSrc ? mapIframeSrc : 'about:blank')
-          : mapIframeSrc;
+        const renderedMapSrc = shouldUseWorldMapDirectSrc ? mapIframeSrc : 'about:blank';
         const shouldUseDungeonDirectSrc = isSaoWorldview
           && _dungeonMapHydratedUrl === dungeonIframeSrc
           && !_dungeonMapEmbedSrcdoc
