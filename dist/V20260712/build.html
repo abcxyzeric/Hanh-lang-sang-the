@@ -8540,7 +8540,7 @@
                                 <div v-for="(skills, tierKey) in currentClassSkillTree" :key="tierKey"
                                     class="tree-row-wrapper">
                                     <div class="tier-connector" v-if="tierKey !== 'Tier1'"></div>
-                                    <div class="tier-label">{{ tierKey }}</div>
+                                    <div class="tier-label">{{ displayOpeningLabel(tierKey) }}</div>
                                     <div class="tier-row">
                                         <div v-for="skill in skills" :key="skill.\u540d\u79f0" class="skill-node"
                                             :class="{'node-awakening': tierKey.includes('\u89c9\u9192'), 'node-locked': isSkillLocked(tierKey, skill.\u540d\u79f0), 'node-warning': hasSkillSoftWarning(tierKey, skill.\u540d\u79f0), 'node-hard-warning': hasSkillHardWarning(tierKey, skill.\u540d\u79f0)}"
@@ -14752,6 +14752,11 @@
                     '\u4eba\u7c7b\u79cd': 'Nh\u00e2n Lo\u1ea1i Ch\u1ee7ng',
                     '\u51e1\u4eba': 'Ph\u00e0m nh\u00e2n',
                     '\u5f02\u80fd': 'D\u1ecb n\u0103ng',
+                    '\u57fa\u7840': 'C\u01a1 b\u1ea3n',
+                    '\u8f6c\u804c': 'Chuy\u1ec3n ch\u1ee9c',
+                    '\u8fdb\u9636': 'N\u00e2ng cao',
+                    '\u5fc5\u6740': 'T\u1ea5t s\u00e1t',
+                    '\u5965\u4e49': '\u00c1o ngh\u0129a',
                     '\u89c9\u9192': 'Th\u1ee9c t\u1ec9nh',
                     '\u9886\u57df': 'L\u0129nh v\u1ef1c',
                     '\u4f20\u8bf4': 'Truy\u1ec1n thuy\u1ebft',
@@ -16116,8 +16121,20 @@
                     return `${new Intl.NumberFormat('vi-VN').format(amount)}G`;
                 }
 
+                const STARTER_SHOP_QUALITY_INPUT_MAP = Object.freeze({
+                    'Th\u01b0\u1eddng': '\u666E\u901A',
+                    'Tinh x\u1ea3o': '\u7CBE\u826F',
+                    'Hi\u1ebfm': '\u7A00\u6709',
+                    'Xu\u1ea5t s\u1eafc': '\u5353\u8D8A',
+                    'Th\u1ea7n kh\u00ed': '\u5353\u8D8A',
+                    'Truy\u1ec1n thuy\u1ebft': '\u4F20\u8BF4',
+                    'S\u1eed thi': '\u53F2\u8BD7',
+                    'Th\u1ea7n tho\u1ea1i': '\u795E\u8BDD'
+                });
+
                 function normalizeQualityName(value) {
-                    return value === '\u795E\u5668' ? '\u5353\u8D8A' : value;
+                    const key = String(value ?? '').trim();
+                    return STARTER_SHOP_QUALITY_INPUT_MAP[key] || (key === '\u795E\u5668' ? '\u5353\u8D8A' : key);
                 }
 
                 function getIdentityResourceTierLabel(items) {
@@ -16435,8 +16452,26 @@
                 const normalizeStarterShopBonuses = (bonusMap) => {
                     if (!bonusMap || typeof bonusMap !== 'object' || Array.isArray(bonusMap)) return {};
                     const normalized = {};
+                    const bonusKeyMap = {
+                        'S\u1ee9c m\u1ea1nh': '\u529B\u91CF',
+                        'Nhanh nh\u1eb9n': '\u654F\u6377',
+                        'Th\u1ec3 ch\u1ea5t': '\u4F53\u8D28',
+                        'Tr\u00ed l\u1ef1c': '\u667A\u529B',
+                        'C\u1ea3m nh\u1eadn': '\u611F\u77E5',
+                        'M\u1ecb l\u1ef1c': '\u9B45\u529B',
+                        'To\u00e0n k\u1ef9 n\u0103ng': '\u5168\u6280\u80FD',
+                        'C\u01a1 b\u1ea3n': '\u57FA\u7840',
+                        'Chuy\u1ec3n ch\u1ee9c': '\u8F6C\u804C',
+                        'N\u00e2ng cao': '\u8FDB\u9636',
+                        'T\u1ea5t s\u00e1t': '\u5FC5\u6740',
+                        '\u00c1o ngh\u0129a': '\u5965\u4E49',
+                        'T\u1ef7 l\u1ec7 ch\u00ed m\u1ea1ng': '\u66B4\u51FB\u7387',
+                        'S\u00e1t th\u01b0\u01a1ng ch\u00ed m\u1ea1ng': '\u66B4\u51FB\u4F24\u5BB3',
+                        'Gi\u1edbi h\u1ea1n sinh l\u1ef1c': '\u751F\u547D\u503C\u4E0A\u9650'
+                    };
                     Object.entries(bonusMap).forEach(([key, rawValue]) => {
-                        const cleanKey = String(key || '').trim();
+                        const rawKey = String(key || '').trim();
+                        const cleanKey = bonusKeyMap[rawKey] || rawKey;
                         if (!cleanKey) return;
                         const value = toFiniteNumber(rawValue, null);
                         if (value === null) return;
@@ -16445,32 +16480,77 @@
                     return normalized;
                 };
 
+                const readStarterShopField = (source, ...keys) => {
+                    if (!source || typeof source !== 'object') return undefined;
+                    for (const key of keys) {
+                        if (!Object.prototype.hasOwnProperty.call(source, key)) continue;
+                        const value = source[key];
+                        if (value === undefined || value === null) continue;
+                        if (typeof value === 'string' && !value.trim()) continue;
+                        return value;
+                    }
+                    return undefined;
+                };
+
+                const normalizeStarterShopCategory = (value, fallback = '\u6B66\u5668') => {
+                    const key = String(value ?? '').trim();
+                    const map = {
+                        'V\u0169 kh\u00ed': '\u6B66\u5668',
+                        'Gi\u00e1p': '\u9632\u5177',
+                        'Trang s\u1ee9c': '\u9996\u9970'
+                    };
+                    return map[key] || key || fallback;
+                };
+
+                const normalizeStarterShopSlot = (value, type) => {
+                    const key = String(value ?? '').trim();
+                    const map = {
+                        'Tay ch\u00ednh': '\u4E3B\u624B',
+                        'Tay ph\u1ee5': '\u526F\u624B',
+                        'Gi\u00e1p vai': '\u62A4\u80A9',
+                        '\u00c1o': '\u4E0A\u8863',
+                        '\u0110ai l\u01b0ng': '\u8170\u5E26',
+                        'Qu\u1ea7n': '\u4E0B\u88C5',
+                        'Gi\u00e0y': '\u978B\u5B50',
+                        'Nh\u1eabn': '\u6212\u6307',
+                        'V\u00f2ng tay': '\u624B\u956F',
+                        'D\u00e2y chuy\u1ec1n': '\u9879\u94FE',
+                        'Khuy\u00ean tai': '\u8033\u73AF',
+                        'Trang b\u1ecb h\u1ed7 tr\u1ee3': '\u8F85\u52A9\u88C5\u5907',
+                        '\u0110\u00e1 ma ph\u00e1p': '\u9B54\u6CD5\u77F3'
+                    };
+                    return map[key] || key || (type === '\u9996\u9970' ? '\u6212\u6307' : type === '\u9632\u5177' ? '\u4E0A\u8863' : '\u4E3B\u624B');
+                };
+
                 const normalizeStarterShopItem = (rawItem, index, priceMap) => {
                     if (!rawItem || typeof rawItem !== 'object' || Array.isArray(rawItem)) return null;
-                    const quality = normalizeQualityName(String(rawItem.\u54C1\u8D28 || '').trim());
+                    const quality = normalizeQualityName(String(readStarterShopField(rawItem, '\u54C1\u8D28', 'Ph\u1ea9m ch\u1ea5t', 'Ch\u1ea5t l\u01b0\u1ee3ng') || '').trim());
                     if (!STARTER_SHOP_QUALITY_ORDER.includes(quality)) return null;
-                    const type = String(rawItem.\u7c7b\u578b || rawItem.\u5206\u7C7B || '').trim() || '\u6B66\u5668';
-                    const slot = String(rawItem.\u90E8\u4F4D || '').trim() || (type === '\u9996\u9970' ? '\u6212\u6307' : type === '\u9632\u5177' ? '\u4E0A\u8863' : '\u4E3B\u624B');
-                    const price = toFiniteNumber(rawItem.\u552E\u4EF7RP, null);
+                    const type = normalizeStarterShopCategory(readStarterShopField(rawItem, '\u7c7b\u578b', 'Lo\u1ea1i', '\u5206\u7C7B', 'Ph\u00e2n lo\u1ea1i'), '\u6B66\u5668');
+                    const category = normalizeStarterShopCategory(readStarterShopField(rawItem, '\u5206\u7C7B', 'Ph\u00e2n lo\u1ea1i', '\u7c7b\u578b', 'Lo\u1ea1i'), type);
+                    const slot = normalizeStarterShopSlot(readStarterShopField(rawItem, '\u90E8\u4F4D', 'V\u1ecb tr\u00ed'), type);
+                    const price = toFiniteNumber(readStarterShopField(rawItem, '\u552E\u4EF7RP', 'Gi\u00e1 RP', 'Gi\u00e1 b\u00e1n RP'), null);
                     const resolvedPrice = Number.isFinite(price) ? Math.max(0, price) : Math.max(0, Number(priceMap[quality] || 0));
-                    const tags = Array.isArray(rawItem.\u6807\u7B7E)
-                        ? Array.from(new Set(rawItem.\u6807\u7B7E.map(tag => String(tag || '').trim()).filter(Boolean)))
+                    const rawTags = readStarterShopField(rawItem, '\u6807\u7B7E', 'Nh\u00e3n');
+                    const tags = Array.isArray(rawTags)
+                        ? Array.from(new Set(rawTags.map(tag => String(tag || '').trim()).filter(Boolean)))
                         : [];
+                    const effect = String(readStarterShopField(rawItem, '\u6548\u679C', 'Hi\u1ec7u \u1ee9ng') || '').trim();
                     return {
                         id: String(rawItem.id || `${type}_${slot}_${index + 1}`).trim() || `${type}_${slot}_${index + 1}`,
-                        \u5206\u7C7B: String(rawItem.\u5206\u7C7B || type).trim() || type,
+                        \u5206\u7C7B: category,
                         \u7c7b\u578b: type,
                         \u90E8\u4F4D: slot,
-                        \u540d\u79f0: String(rawItem.\u540d\u79f0 || `Trang bị chưa đặt tên ${index + 1}`).trim() || `Trang bị chưa đặt tên ${index + 1}`,
+                        \u540d\u79f0: String(readStarterShopField(rawItem, '\u540d\u79f0', 'T\u00ean') || `Trang bị chưa đặt tên ${index + 1}`).trim() || `Trang bị chưa đặt tên ${index + 1}`,
                         \u54C1\u8D28: quality,
-                        \u7B49\u7EA7: Math.max(1, Math.floor(toFiniteNumber(rawItem.\u7B49\u7EA7, 1) || 1)),
-                        \u54C1\u7EA7: null,
+                        \u7B49\u7EA7: Math.max(1, Math.floor(toFiniteNumber(readStarterShopField(rawItem, '\u7B49\u7EA7', 'C\u1ea5p'), 1) || 1)),
+                        \u54C1\u7EA7: readStarterShopField(rawItem, '\u54C1\u7EA7', 'C\u1ea5p b\u1eadc') ?? null,
                         \u6807\u7B7E: tags,
-                        \u5C5E\u6027\u52A0\u6210: normalizeStarterShopBonuses(rawItem.\u5C5E\u6027\u52A0\u6210),
-                        \u6548\u679C: String(rawItem.\u6548\u679C || '').trim(),
-                        \u7ECF\u5178\u6548\u679C: String(rawItem.\u7ECF\u5178\u6548\u679C ?? rawItem.\u6548\u679C ?? '').trim(),
-                        \u65B0\u7248\u6548\u679C: String(rawItem.\u65B0\u7248\u6548\u679C ?? rawItem.\u6548\u679C ?? '').trim(),
-                        \u63cf\u8ff0: String(rawItem.\u63cf\u8ff0 || '').trim(),
+                        \u5C5E\u6027\u52A0\u6210: normalizeStarterShopBonuses(readStarterShopField(rawItem, '\u5C5E\u6027\u52A0\u6210', 'C\u1ed9ng thu\u1ed9c t\u00ednh')),
+                        \u6548\u679C: effect,
+                        \u7ECF\u5178\u6548\u679C: String(readStarterShopField(rawItem, '\u7ECF\u5178\u6548\u679C', 'Hi\u1ec7u \u1ee9ng c\u1ed5 \u0111i\u1ec3n') ?? effect).trim(),
+                        \u65B0\u7248\u6548\u679C: String(readStarterShopField(rawItem, '\u65B0\u7248\u6548\u679C', 'Hi\u1ec7u \u1ee9ng m\u1edbi') ?? effect).trim(),
+                        \u63cf\u8ff0: String(readStarterShopField(rawItem, '\u63cf\u8ff0', 'M\u00f4 t\u1ea3') || '').trim(),
                         \u552E\u4EF7RP: resolvedPrice
                     };
                 };
@@ -16490,7 +16570,7 @@
                 };
 
                 const normalizeStarterShopPayload = (payload) => {
-                    const defaultPriceSource = payload?.['Giá bán RP mặc định'] || payload?.['\u9ed8\u8ba4\u552e\u4ef7RP'];
+                    const defaultPriceSource = payload?.['Gi\u00e1 m\u1eb7c \u0111\u1ecbnh RP'] || payload?.['Gi\u00e1 b\u00e1n RP m\u1eb7c \u0111\u1ecbnh'] || payload?.['\u9ed8\u8ba4\u552e\u4ef7RP'];
                     const rawDefaultPrices = (payload && typeof payload === 'object' && !Array.isArray(payload) && defaultPriceSource && typeof defaultPriceSource === 'object')
                         ? defaultPriceSource
                         : {};
@@ -22751,7 +22831,7 @@ Thước điểm cuối đã tính điểm trừ bổ sung: 60 đến 69 đạt 
                     selectedPresetChar, presetCharacters,
                     mockData, availableRaces, character, currentRace, currentRaceDisplayBuffs, characterLevel,
                     maxAP, remainingAP, remainingRP, levelBonus, baseRP,
-                    displayRaceName, displayClassName, getPresetRaceDisplay, getPresetClassDisplay,
+                    displayRaceName, displayClassName, displayOpeningLabel, displayOpeningCampLabel, getPresetRaceDisplay, getPresetClassDisplay,
                     currentIdentities, currentIdentityObj,
                     customIdentity, currentCustomIdentityTier, toggleCustomIdentity, toggleSaoCustomIdentityText,
                     // Cấp sinh ra và điểm sinh
