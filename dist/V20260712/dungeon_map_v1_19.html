@@ -469,6 +469,11 @@ function safeParseJson(text, requiredKeys) {
 // cho cửa sổ cha (cùng origin với quán rượu) thực hiện.
 let _rpcSeq = 0;
 const _rpcPending = {};
+const HOST_RPC_DEFAULT_TIMEOUT_MS = 120000;
+const HOST_RPC_CONTEXT_TIMEOUT_MS = 30000;
+const HOST_RPC_LLM_TIMEOUT_MS = 800000;
+const HOST_RPC_WORLDBOOK_TIMEOUT_MS = 60000;
+const HOST_RPC_SHORT_TIMEOUT_MS = 15000;
 
 window.addEventListener('message', (e) => {
   const d = e.data;
@@ -481,7 +486,7 @@ window.addEventListener('message', (e) => {
   else p.resolve(d.result);
 });
 
-function callHostRPC(action, params, timeoutMs = 120000) {
+function callHostRPC(action, params, timeoutMs = HOST_RPC_DEFAULT_TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
     if (window.parent === window) {
       reject(new Error('Chưa nhúng trong cửa sổ chủ, không thể gọi năng lực Tavern.'));
@@ -489,7 +494,7 @@ function callHostRPC(action, params, timeoutMs = 120000) {
     }
     const id = `rpc_${++_rpcSeq}_${Date.now()}`;
     const timer = setTimeout(() => {
-      if (_rpcPending[id]) { delete _rpcPending[id]; reject(new Error('Cửa sổ chủ phản hồi quá thời gian.')); }
+      if (_rpcPending[id]) { delete _rpcPending[id]; reject(new Error(`Cửa sổ chủ phản hồi quá thời gian (${Math.round(timeoutMs / 1000)} giây).`)); }
     }, timeoutMs);
     _rpcPending[id] = { resolve, reject, timer };
     try {
@@ -520,7 +525,7 @@ function getHostPlace(ctx) {
 async function loadHostContext() {
   const history = parseInt($('f-history').value) || 0;
   try {
-    hostContext = await callHostRPC('get_context', { history }, 15000);
+    hostContext = await callHostRPC('get_context', { history }, HOST_RPC_CONTEXT_TIMEOUT_MS);
   } catch (e) {
     console.warn('[Bản đồ con] Lấy ngữ cảnh thất bại:', e);
     hostContext = null;
@@ -563,7 +568,7 @@ function logDebug(step, raw) {
 }
 
 async function callLLM(systemPrompt, userPrompt) {
-  return await callHostRPC('llm', { systemPrompt, userPrompt, mode: genMode });
+  return await callHostRPC('llm', { systemPrompt, userPrompt, mode: genMode }, HOST_RPC_LLM_TIMEOUT_MS);
 }
 
 // ==================== Xây prompt SKILL ====================
@@ -951,7 +956,7 @@ async function generate() {
     // Phải xóa trước khi gọi LLM: khi tạo kèm worldbook, nếu "Bản đồ phụ bản" cũ vẫn còn thì AI sẽ nhìn thấy và chép theo.
     setProgress(8, 'Đang xóa bản đồ phụ bản trước...');
     try {
-      await callHostRPC('delete_worldbook', { entryNames: ['Bản đồ phụ bản', 'Bản đồ phụ bản·GM bí mật'] }, 20000);
+      await callHostRPC('delete_worldbook', { entryNames: ['Bản đồ phụ bản', 'Bản đồ phụ bản·GM bí mật'] }, HOST_RPC_WORLDBOOK_TIMEOUT_MS);
     } catch (e) {
       console.warn('[Bản đồ con] Xóa mục Bản đồ phụ bản cũ thất bại (bỏ qua, tiếp tục tạo):', e);
     }
@@ -1473,7 +1478,7 @@ async function writeDungeonToWorldbook() {
     title: data.title,
     content: buildWorldbookPublicText(),
     keywords: publicKeywords
-  }, 20000);
+  }, HOST_RPC_WORLDBOOK_TIMEOUT_MS);
 
   // 2) Entry GM bí mật (luôn ghi; nếu toàn bản đồ không có cơ mật thì ghi đoạn giữ chỗ để bảo đảm không sót cơ mật từ bản đồ trước)
   await callHostRPC('save_worldbook', {
@@ -1481,7 +1486,7 @@ async function writeDungeonToWorldbook() {
     title: data.title,
     content: buildWorldbookSecretText(),
     keywords: secretKeywords.length ? secretKeywords : ['Bản đồ phụ bản']
-  }, 20000);
+  }, HOST_RPC_WORLDBOOK_TIMEOUT_MS);
 
   return res;
 }
@@ -1531,7 +1536,7 @@ async function rewriteWorldbookManually() {
 async function deleteWorldbookManually() {
   if (!confirm('Bạn có chắc muốn xóa hai mục worldbook 「Bản đồ phụ bản」 và 「Bản đồ phụ bản·GM bí mật」 không?\nThao tác này không ảnh hưởng đến bản đồ trên khung vẽ hiện tại.')) return;
   try {
-    const res = await callHostRPC('delete_worldbook', { entryNames: ['Bản đồ phụ bản', 'Bản đồ phụ bản·GM bí mật'] }, 20000);
+    const res = await callHostRPC('delete_worldbook', { entryNames: ['Bản đồ phụ bản', 'Bản đồ phụ bản·GM bí mật'] }, HOST_RPC_WORLDBOOK_TIMEOUT_MS);
     if (res?.removed > 0) showToast(`Đã xóa ${res.removed} mục worldbook`, 'success');
     else showToast('Không tìm thấy mục Bản đồ phụ bản trong worldbook', '');
   } catch (e) {
@@ -1581,7 +1586,7 @@ function showToast(msg, type = '') {
 
 // Ghi text vào ô chat quán rượu qua host proxy (không tự động gửi)
 async function tavernSendMessage(text) {
-  return await callHostRPC('send_message', { text }, 15000);
+  return await callHostRPC('send_message', { text }, HOST_RPC_SHORT_TIMEOUT_MS);
 }
 
 // Khi người chơi bấm node rồi chọn "Khám phá nơi này": ghi một chỉ lệnh khám phá rõ ràng vào ô chat quán rượu (không tự động gửi),
