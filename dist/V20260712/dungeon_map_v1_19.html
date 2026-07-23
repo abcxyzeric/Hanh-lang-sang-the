@@ -1,0 +1,1648 @@
+<!DOCTYPE html>
+<html lang="vi-VN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bộ tạo bản đồ con</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://code.iconify.design/iconify-icon/3.0.0/iconify-icon.min.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { width:100%; height:100%; font-family:'Noto Serif SC',serif; background:#1a1a2e; color:#c8b88a; }
+
+#app { display:flex; height:100vh; }
+
+/* Form bên trái */
+#form-panel {
+  width:340px; flex:0 0 340px; background:rgba(15,20,35,0.95); border-right:1px solid rgba(200,184,138,0.15);
+  padding:20px; overflow-y:auto; position:relative;
+  transition: width 0.28s ease, flex-basis 0.28s ease, padding 0.28s ease, opacity 0.2s ease;
+}
+#form-panel.collapsed {
+  width:0; flex-basis:0; padding-left:0; padding-right:0;
+  overflow:hidden; border-right:none; opacity:0;
+}
+/* Nút thu gọn/mở rộng nổi ở góc trên bên trái */
+#panel-toggle {
+  position:fixed; top:12px; left:12px; z-index:150;
+  width:34px; height:34px; border-radius:8px; cursor:pointer;
+  background:rgba(20,28,42,0.92); color:#c8b88a; border:1px solid rgba(200,184,138,0.3);
+  font-size:16px; display:flex; align-items:center; justify-content:center;
+  font-family:inherit; box-shadow:0 2px 8px rgba(0,0,0,0.4);
+}
+#panel-toggle:hover { background:rgba(200,184,138,0.18); }
+/* Nút thu gọn trong panel */
+#panel-collapse {
+  position:absolute; top:14px; right:14px; z-index:10;
+  width:26px; height:26px; border-radius:6px; cursor:pointer;
+  background:rgba(200,184,138,0.08); color:#c8b88a; border:1px solid rgba(200,184,138,0.2);
+  font-size:14px; display:flex; align-items:center; justify-content:center; font-family:inherit;
+}
+#panel-collapse:hover { background:rgba(200,184,138,0.2); }
+
+#form-panel h1 { font-size:18px; color:#e8dcc0; margin-bottom:16px; }
+.form-group { margin-bottom:14px; }
+.form-group label { display:block; font-size:12px; color:#8a7a5a; margin-bottom:4px; font-weight:600; }
+.form-group input, .form-group select, .form-group textarea {
+  width:100%; padding:8px 10px; background:rgba(20,28,42,0.8); border:1px solid rgba(200,184,138,0.2);
+  border-radius:6px; color:#e8dcc0; font-family:inherit; font-size:13px; outline:none;
+}
+.form-group textarea { resize:vertical; min-height:60px; font-family:inherit; }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+  border-color:rgba(200,184,138,0.5);
+}
+.form-row { display:flex; gap:10px; }
+.form-row .form-group { flex:1; }
+
+#generate-btn {
+  width:100%; padding:12px; background:linear-gradient(135deg, #5b4bc4, #7f72ff);
+  color:#fff; border:none; border-radius:8px; font-size:14px; font-weight:700;
+  cursor:pointer; margin-top:8px;
+}
+#generate-btn:hover { filter:brightness(1.1); }
+#generate-btn:disabled { opacity:0.5; cursor:not-allowed; }
+
+#progress {
+  margin-top:16px; padding:10px; background:rgba(108,92,231,0.1);
+  border-radius:6px; font-size:12px; line-height:1.6; display:none;
+}
+#progress.active { display:block; }
+#progress.error { background:rgba(233,69,96,0.15); color:#ff8090; }
+
+#progress-bar {
+  width:100%; height:4px; background:rgba(200,184,138,0.15); border-radius:2px;
+  overflow:hidden; margin-top:8px;
+}
+#progress-bar-fill {
+  height:100%; background:linear-gradient(90deg,#6c5ce7,#a29bfe);
+  width:0%; transition:width 0.3s;
+}
+
+#actions { display:none; margin-top:12px; gap:8px; flex-wrap:wrap; }
+#actions.active { display:flex; }
+.action-btn {
+  flex:1; padding:8px; background:rgba(200,184,138,0.1); color:#c8b88a;
+  border:1px solid rgba(200,184,138,0.2); border-radius:6px; font-size:12px;
+  cursor:pointer; font-family:inherit;
+}
+.action-btn:hover { background:rgba(200,184,138,0.2); }
+
+/* Bản đồ bên phải */
+#map-area { flex:1; position:relative; overflow:hidden; }
+#map-container {
+  position:relative; width:100%; height:100%; cursor:grab;
+  touch-action:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
+}
+#map-container.grabbing { cursor:grabbing; }
+#edge-canvas { position:absolute; top:0; left:0; width:100%; height:100%; }
+#node-layer { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
+
+.node-wrapper {
+  position:absolute; display:flex; flex-direction:column; align-items:center;
+  pointer-events:auto; cursor:pointer; transform:translate(-50%,-50%);
+  transition:filter 0.2s, transform 0.1s;
+}
+.node-wrapper:hover { filter:brightness(1.3) drop-shadow(0 0 8px rgba(200,184,138,0.5)); transform:translate(-50%,-50%) scale(1.05); }
+.node-icon { display:flex; align-items:center; justify-content:center; }
+iconify-icon { display:inline-block; width:1em; height:1em; line-height:1; }
+.node-disc {
+  width:40px; height:40px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  background:radial-gradient(circle at 32% 28%, rgba(48,54,78,0.96), rgba(11,14,24,0.97));
+  border:2px solid var(--nc, #c8b88a);
+}
+.node-disc iconify-icon { display:block; color:var(--nc, #c8b88a); }
+.node-label {
+  margin-top:4px; white-space:nowrap; text-align:center; color:#f0e8d0;
+  font-weight:700; font-size:12px; text-shadow:1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+  background:rgba(10,10,20,0.85); padding:2px 8px; border-radius:3px;
+}
+/* Làm nổi bật vị trí hiện tại: vòng sáng + badge "Bạn ở đây" */
+.node-wrapper.current { z-index:20; }
+.node-wrapper.current .node-disc {
+  border-color:#ffcf4d;
+  box-shadow:0 0 0 3px rgba(255,207,77,0.55), 0 0 16px 5px rgba(255,207,77,0.75) !important;
+  animation:nodeHerePulse 1.8s ease-in-out infinite;
+}
+@keyframes nodeHerePulse {
+  0%,100% { box-shadow:0 0 0 3px rgba(255,207,77,0.45), 0 0 12px 3px rgba(255,207,77,0.55) !important; }
+  50%     { box-shadow:0 0 0 4px rgba(255,207,77,0.7), 0 0 20px 7px rgba(255,207,77,0.95) !important; }
+}
+.node-here-badge {
+  margin-top:3px; font-size:10px; line-height:1; color:#1a1a2e; font-weight:700;
+  background:#ffcf4d; padding:2px 7px; border-radius:8px; white-space:nowrap;
+  box-shadow:0 1px 4px rgba(0,0,0,0.5);
+}
+/* Node giữ chỗ "?": chỉ hiện khi người chơi tới nơi liền kề, gợi ý có thể thăm dò khu vực ẩn */
+.node-wrapper.mystery .node-disc {
+  border-color:#b18cff;
+  box-shadow:0 0 0 2px rgba(177,140,255,0.5), 0 0 14px 4px rgba(177,140,255,0.7) !important;
+  animation:mysteryPulse 1.6s ease-in-out infinite;
+}
+.node-wrapper.mystery .node-q {
+  display:flex; align-items:center; justify-content:center;
+  width:100%; height:100%;
+  font-size:22px; font-weight:800; color:#cbb3ff; line-height:1;
+  text-shadow:0 0 8px rgba(177,140,255,0.9);
+}
+@keyframes mysteryPulse {
+  0%,100% { box-shadow:0 0 0 2px rgba(177,140,255,0.4), 0 0 10px 3px rgba(177,140,255,0.5) !important; }
+  50%     { box-shadow:0 0 0 3px rgba(177,140,255,0.75), 0 0 20px 7px rgba(177,140,255,0.95) !important; }
+}
+.node-mystery-badge {
+  margin-top:3px; font-size:10px; line-height:1; color:#1a1226; font-weight:700;
+  background:#b18cff; padding:2px 7px; border-radius:8px; white-space:nowrap;
+  box-shadow:0 1px 4px rgba(0,0,0,0.5);
+}
+/* Gợi ý kín đáo khi có easter egg: banner nhỏ trên đầu bản đồ, không tiết lộ node nào */
+#secret-hint {
+  position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:120;
+  padding:5px 14px; border-radius:14px; font-size:12px; letter-spacing:1px; white-space:nowrap;
+  color:#e9d8ff; background:rgba(40,28,60,0.82); border:1px solid rgba(177,140,255,0.45);
+  pointer-events:none; animation:secretHintGlow 2.6s ease-in-out infinite alternate;
+}
+@keyframes secretHintGlow {
+  0%   { box-shadow:0 0 6px rgba(177,140,255,0.25); opacity:0.82; }
+  100% { box-shadow:0 0 16px rgba(177,140,255,0.6); opacity:1; }
+}
+
+#empty-state {
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  color:rgba(200,184,138,0.4); font-size:14px;
+}
+
+/* Detail Modal */
+.detail-overlay {
+  display:none; position:fixed; inset:0; z-index:200;
+  background:rgba(5,5,15,0.8); backdrop-filter:blur(6px);
+  justify-content:center; align-items:center;
+}
+.detail-overlay.active { display:flex; }
+.detail-panel {
+  width:90%; max-width:600px; max-height:85vh;
+  background:rgba(20,25,40,0.97); border:1px solid rgba(200,184,138,0.2);
+  border-radius:12px; overflow-y:auto;
+}
+.detail-close {
+  position:sticky; top:0; right:0; z-index:10; float:right;
+  margin:12px 12px 0 0; width:32px; height:32px;
+  border:1px solid rgba(200,184,138,0.2); background:rgba(20,28,36,0.9);
+  color:#c8b88a; font-size:18px; border-radius:50%; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+}
+.detail-header { padding:24px 24px 14px; border-bottom:1px solid rgba(200,184,138,0.1); }
+.detail-title { font-size:18px; font-weight:700; color:#e8dcc0; margin-bottom:6px; }
+.detail-badge {
+  display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px;
+  background:rgba(200,184,138,0.1); color:#c8b88a;
+  border:1px solid rgba(200,184,138,0.2); margin-right:6px;
+}
+.detail-summary { padding:14px 24px; color:#b8b8a8; font-size:13px; line-height:1.8; border-bottom:1px solid rgba(200,184,138,0.08); white-space:pre-line; }
+.detail-hook {
+  margin:14px 24px 0; padding:10px 12px;
+  background:rgba(108,92,231,0.12); border:1px solid rgba(127,114,255,0.32);
+  border-radius:8px; color:#d4caf2; font-size:12.5px; line-height:1.7;
+}
+.detail-hook-tag {
+  display:inline-block; margin-right:8px; padding:1px 7px; border-radius:6px;
+  background:rgba(127,114,255,0.25); color:#e8e0ff; font-size:10.5px; font-weight:700; letter-spacing:0.5px;
+  vertical-align:1px;
+}
+.detail-body { padding:8px 24px 24px; }
+.detail-section { margin-top:12px; padding-top:10px; border-top:1px solid rgba(200,184,138,0.06); }
+.detail-section-title { font-size:11px; color:#8a7a5a; font-weight:600; margin-bottom:6px; letter-spacing:1px; }
+.detail-section-content { font-size:12px; color:#c8c0a8; line-height:1.7; white-space:pre-line; }
+
+/* Nút thao tác trong panel chi tiết */
+.detail-actions {
+  padding:14px 24px; display:flex; gap:8px; flex-wrap:wrap;
+  border-top:1px solid rgba(200,184,138,0.1); background:rgba(108,92,231,0.05);
+}
+.detail-action-btn {
+  flex:1; padding:8px 12px; background:rgba(200,184,138,0.1); color:#c8b88a;
+  border:1px solid rgba(200,184,138,0.2); border-radius:6px; font-size:12px;
+  cursor:pointer; font-family:inherit; font-weight:600;
+}
+.detail-action-btn:hover { background:rgba(200,184,138,0.2); }
+.detail-action-btn.primary {
+  background:linear-gradient(135deg, rgba(108,92,231,0.3), rgba(127,114,255,0.3));
+  border-color:rgba(108,92,231,0.4); color:#e8dcc0;
+}
+
+/* Thông báo toast */
+#toast {
+  position:fixed; top:20px; left:50%; transform:translateX(-50%);
+  padding:10px 20px; border-radius:8px; font-size:13px; z-index:300;
+  background:rgba(20,28,42,0.95); color:#c8b88a;
+  border:1px solid rgba(200,184,138,0.3); display:none;
+}
+#toast.show { display:block; animation:toastIn 0.3s; }
+#toast.error { border-color:rgba(233,69,96,0.5); color:#ff8090; }
+#toast.success { border-color:rgba(46,204,113,0.5); color:#a0e6b3; }
+@keyframes toastIn { from { opacity:0; transform:translateX(-50%) translateY(-10px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Mở trình tạo (chỉ hiển thị khi đã thu gọn) -->
+  <button id="panel-toggle" title="Mở trình tạo" style="display:none;">☰</button>
+  <!-- Form bên trái -->
+  <div id="form-panel">
+    <button id="panel-collapse" title="Thu gọn trình tạo">⟨</button>
+    <h1>Bộ tạo bản đồ con</h1>
+
+    <div id="ctx-banner" style="margin-bottom:14px; padding:10px 12px; background:rgba(108,92,231,0.1); border:1px solid rgba(108,92,231,0.25); border-radius:8px; font-size:12px; line-height:1.7;">
+      <div style="color:#8a7a5a; font-size:11px; font-weight:600; margin-bottom:4px;">Sẽ tự động tạo theo diễn biến hiện tại</div>
+      <div id="ctx-location">Địa điểm hiện tại:<span style="color:#e8dcc0;">Đang đọc…</span></div>
+      <button id="ctx-refresh" style="margin-top:6px; padding:3px 10px; background:rgba(200,184,138,0.1); color:#c8b88a; border:1px solid rgba(200,184,138,0.2); border-radius:5px; font-size:11px; cursor:pointer; font-family:inherit;">Làm mới ngữ cảnh</button>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Quy mô</label>
+        <select id="f-size">
+          <option value="6">Nhỏ (5-7 node)</option>
+          <option value="9" selected>Vừa (8-10 node)</option>
+          <option value="13">Lớn (11-15 node)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Số đoạn lịch sử chat</label>
+        <input id="f-history" type="number" value="8" min="0" max="20">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Ghi chú bổ sung (không bắt buộc)</label>
+      <textarea id="f-note" placeholder="Có thể để trống. Nếu cần chỉ định thủ công địa điểm/mục tiêu, hãy bổ sung tại đây; nếu không thì tất cả sẽ tự động tạo theo diễn biến."></textarea>
+    </div>
+
+    <div class="form-group">
+      <label>Chế độ tạo</label>
+      <select id="f-mode">
+        <option value="world" selected>Có worldbook · không kèm preset (khuyến nghị)</option>
+        <option value="preset">Chế độ phá giới hạn (kèm preset + worldbook)</option>
+        <option value="clean">Chỉ prompt thuần (không kèm gì · ổn định nhất nhưng thiếu thiết lập)</option>
+      </select>
+    </div>
+
+    <button id="generate-btn">Tạo bản đồ</button>
+
+    <div id="progress">
+      <div id="progress-text">Đang chuẩn bị...</div>
+      <div id="progress-bar"><div id="progress-bar-fill"></div></div>
+    </div>
+
+    <div id="actions">
+      <button class="action-btn" id="apply-btn">Viết lại bản đồ phụ bản</button>
+      <button class="action-btn" id="delete-btn" style="flex:0 0 auto; color:#ff8090; border-color:rgba(233,69,96,0.35);">Xóa bản đồ phụ bản</button>
+    </div>
+
+    <div id="debug-box" style="margin-top:14px; display:none;">
+      <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" id="debug-toggle">
+        <span style="font-size:11px; color:#8a7a5a; font-weight:600;">Gỡ lỗi · Phản hồi gần nhất</span>
+        <span style="font-size:10px; color:#8a7a5a;" id="debug-caret">Mở ▼</span>
+      </div>
+      <pre id="debug-log" style="display:none; margin-top:6px; max-height:240px; overflow:auto; background:rgba(0,0,0,0.35); border:1px solid rgba(200,184,138,0.15); border-radius:6px; padding:8px; font-size:11px; line-height:1.5; white-space:pre-wrap; word-break:break-word; color:#bcb89a; font-family:ui-monospace,Consolas,monospace;"></pre>
+    </div>
+  </div>
+
+  <!-- Bản đồ bên phải -->
+  <div id="map-area">
+    <div id="secret-hint" style="display:none;">✦ Nơi này dường như có bí ẩn, khám phá kỹ có thể có phát hiện</div>
+    <div id="empty-state">Nhấn "Tạo bản đồ", hệ thống sẽ tự động tạo theo diễn biến hiện tại</div>
+    <div id="map-container" style="display:none;">
+      <canvas id="edge-canvas"></canvas>
+      <div id="node-layer"></div>
+    </div>
+  </div>
+</div>
+
+<div class="detail-overlay" id="detail-overlay">
+  <div class="detail-panel">
+    <button class="detail-close" id="detail-close">✕</button>
+    <div class="detail-header" id="detail-header"></div>
+    <div class="detail-summary" id="detail-summary"></div>
+    <div class="detail-body" id="detail-body"></div>
+    <div class="detail-actions">
+      <button class="detail-action-btn primary" id="detail-explore-btn">Khám phá nơi này</button>
+      <button class="detail-action-btn primary" id="detail-discover-btn" style="display:none;">Thăm dò nơi này</button>
+      <button class="detail-action-btn" id="detail-copy-btn">Sao chép mô tả</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ==================== Cấu hình loại node ====================
+// Phân loại theo "ngữ nghĩa chức năng" (trình tạo sẽ dựa vào đó để gán type cho từng node), dùng chung cho mọi chủ đề —
+// Dù là quán trà, dinh thự, chợ, cổ mộ hay doanh trại địch, "vai trò" của node cũng không thể thoát khỏi mấy loại này.
+// Phối màu tiết chế: xanh = Lối vào, vàng = Lối ra/Kho báu (mục tiêu), đỏ = Chiến đấu, cam = Cứ điểm/Nguy địa (cảnh báo), vàng trung tính = Nút giao/Điểm phát hiện.
+const NC_NEUTRAL = '#c8b88a';  // vàng ấm trung tính (màu chủ đạo)
+const ICON_SIZE = 22;          // kích thước icon thống nhất
+const typeConfig = {
+  entrance:   { color:'#5fb87a', label:'Lối vào',   icon:'game-icons:gate' },            // Xanh: điểm bắt đầu để vào khu vực
+  exit:       { color:'#ffcf4d', label:'Lối ra',   icon:'game-icons:portal' },          // Vàng: điểm kết thúc để rời đi/đi tới mục tiêu
+  hub:        { color:NC_NEUTRAL, label:'Nút giao',   icon:'game-icons:crossroad' },       // Khu chuyển tiếp/khoảng mở nối nhiều đường
+  combat:     { color:'#e2574c', label:'Chiến đấu',   icon:'game-icons:crossed-swords' },  // Đỏ: nơi có thể bùng nổ chiến đấu/thủ lĩnh
+  stronghold: { color:'#e08a3c', label:'Cứ điểm',   icon:'game-icons:barracks' },        // Cam: nơi do phe nào đó kiểm soát/đồn trú
+  discovery:  { color:NC_NEUTRAL, label:'Điểm đáng chú ý', icon:'game-icons:magnifying-glass' },// Manh mối/tường thuật/câu đố/kỳ ngộ
+  hazard:     { color:'#e0a040', label:'Nguy địa',   icon:'game-icons:spikes' },          // Cam: bẫy/cơ quan/nguy hiểm môi trường
+  treasure:   { color:'#ffcf4d', label:'Kho báu',   icon:'game-icons:open-treasure-chest' },// Vàng: tài vật/vật tư then chốt/mục tiêu
+};
+// Tên loại cũ -> loại chức năng mới (tương thích cache cũ và cách gọi cũ đôi khi do mô hình sinh ra)
+const TYPE_ALIAS = {
+  waystation:'entrance', portal:'exit', dungeon:'combat', camp:'stronghold',
+  poi:'discovery', ruins:'hazard', temple:'discovery', cemetery:'discovery', mine:'discovery',
+};
+function resolveType(t) { return typeConfig[t] ? t : (typeConfig[TYPE_ALIAS[t]] ? TYPE_ALIAS[t] : 'discovery'); }
+
+// Popup chi tiết node chỉ hiển thị thông tin người chơi thấy được (không gồm secrets của GM)
+const FIELD_LABELS = {
+  monsters: 'Quái vật',
+  environmentFeatures: 'Đặc điểm môi trường',
+};
+
+// ==================== Trạng thái ====================
+let currentMapData = null;
+let viewX = 0, viewY = 0, scale = 1.0;
+let isDragging = false, dragStartX = 0, dragStartY = 0, dragViewX = 0, dragViewY = 0;
+let activePointerId = null;
+let nodeElements = [];
+
+// Easter egg: mỗi lần tạo có xác suất ném trúng "node ẩn". Việc trúng hay không do code ném xúc xắc quyết định, không giao cho AI.
+// Chỉ khi trúng mới thêm yêu cầu "thêm 1 node ẩn" vào prompt tạo.
+// Easter egg "là gì" sẽ để AI hiểu rõ chủ đề phụ bản tự quyết theo đề tài; code không định sẵn loại.
+const HIDDEN_NODE_CHANCE = 0.25;
+
+// Dấu phân tách định dạng "công trình·node" trong phụ bản (text gửi luôn dùng dấu này để ghép {title}·{tên node}).
+// Khi phân tích sẽ nhận cả · và ・, đồng thời trim từng đoạn, nên host có/không thêm khoảng trắng đều khớp.
+const NODE_SEP = '·';
+
+// ==================== DOM ====================
+const $ = id => document.getElementById(id);
+const container = $('map-container');
+const canvas = $('edge-canvas');
+const ctx = canvas.getContext('2d');
+const nodeLayer = $('node-layer');
+const emptyState = $('empty-state');
+
+// ==================== Công cụ ====================
+function escHtml(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+function setProgress(percent, text, isError=false) {
+  const p = $('progress');
+  p.classList.add('active');
+  p.classList.toggle('error', isError);
+  $('progress-text').textContent = text;
+  $('progress-bar-fill').style.width = percent + '%';
+}
+
+// Trích mọi chuỗi con JSON object "ngoặc cân bằng" từ văn bản bất kỳ (bỏ qua đúng dấu nháy/escape/ngoặc trong string)
+function extractJsonObjects(text) {
+  const out = [];
+  let depth = 0, start = -1, inStr = false, esc = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') { inStr = true; continue; }
+    if (ch === '{') { if (depth === 0) start = i; depth++; }
+    else if (ch === '}') {
+      if (depth > 0 && --depth === 0 && start >= 0) { out.push(text.slice(start, i + 1)); start = -1; }
+    }
+  }
+  return out;
+}
+
+// Tìm đệ quy trong object đã parse (cây) object con có field chỉ định
+function findByKeys(obj, keys) {
+  if (!obj || typeof obj !== 'object') return null;
+  if (!keys) return obj;
+  if (keys.some(k => obj[k] != null)) return obj;
+  for (const v of Object.values(obj)) {
+    if (v && typeof v === 'object') {
+      const found = findByKeys(v, keys);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+// Trong phản hồi có thể lẫn <think>/chính văn/nhiều đoạn JSON, móc ra đoạn JSON chứa field mục tiêu
+// requiredKeys: 'nodes' (khung) / 'edges' (kết nối) / 'rooms' (điền nội dung); chỉ object có field trúng mới tính là mục tiêu
+function safeParseJson(text, requiredKeys) {
+  if (!text) return null;
+  const cleaned = String(text)
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')     // bỏ khối suy nghĩ
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+    .replace(/```json/gi, '').replace(/```/g, '');
+  const keys = Array.isArray(requiredKeys) ? requiredKeys : (requiredKeys ? [requiredKeys] : null);
+
+  // 1) Parse trực tiếp toàn bộ (kèm tìm field đệ quy)
+  try {
+    const whole = JSON.parse(cleaned.trim());
+    const found = findByKeys(whole, keys);
+    if (found) return found;
+  } catch {}
+
+  // 2) Quét mọi chuỗi con JSON cân bằng, ưu tiên trả object trúng field mục tiêu; nếu không trúng thì fallback object parse được đầu tiên
+  let fallback = null;
+  for (const cand of extractJsonObjects(cleaned)) {
+    let obj;
+    try { obj = JSON.parse(cand); } catch { continue; }
+    const found = findByKeys(obj, keys);
+    if (found) return found;
+    if (!fallback && obj && typeof obj === 'object') fallback = obj;
+  }
+  return keys ? null : fallback;
+}
+
+// ==================== Cầu nối RPC host cross-origin ====================
+// Trang này thường được nhúng như iframe khác origin trong thanh trạng thái dưới, không thể truy cập trực tiếp TavernHelper của quán rượu.
+// Chính sách cùng origin sẽ chặn window.parent. Mọi thao tác cần năng lực của quán rượu đều ủy quyền qua postMessage
+// cho cửa sổ cha (cùng origin với quán rượu) thực hiện.
+let _rpcSeq = 0;
+const _rpcPending = {};
+
+window.addEventListener('message', (e) => {
+  const d = e.data;
+  if (!d || d.type !== 'rpc_response' || !d.id) return;
+  const p = _rpcPending[d.id];
+  if (!p) return;
+  clearTimeout(p.timer);
+  delete _rpcPending[d.id];
+  if (d.error) p.reject(new Error(d.error));
+  else p.resolve(d.result);
+});
+
+function callHostRPC(action, params, timeoutMs = 120000) {
+  return new Promise((resolve, reject) => {
+    if (window.parent === window) {
+      reject(new Error('Chưa nhúng trong cửa sổ chủ, không thể gọi năng lực Tavern.'));
+      return;
+    }
+    const id = `rpc_${++_rpcSeq}_${Date.now()}`;
+    const timer = setTimeout(() => {
+      if (_rpcPending[id]) { delete _rpcPending[id]; reject(new Error('Cửa sổ chủ phản hồi quá thời gian.')); }
+    }, timeoutMs);
+    _rpcPending[id] = { resolve, reject, timer };
+    try {
+      window.parent.postMessage({ source: 'dungeon_map', type: 'rpc_request', id, action, params }, '*');
+    } catch (err) {
+      clearTimeout(timer); delete _rpcPending[id]; reject(err);
+    }
+  });
+}
+
+// Ngữ cảnh cốt truyện hiện lấy từ host
+let hostContext = null;
+
+function readFirstDefined(obj, keys) {
+  if (!obj) return '';
+  for (const key of keys) {
+    if (!key) continue;
+    const val = obj[key];
+    if (val != null && String(val).trim()) return val;
+  }
+  return '';
+}
+
+function getHostPlace(ctx) {
+  return readFirstDefined(ctx, ['Địa điểm đầy đủ', 'Địa điểm', '\u4F4D\u7F6E\u5B8C\u6574', '\u573A\u6240']);
+}
+
+async function loadHostContext() {
+  const history = parseInt($('f-history').value) || 0;
+  try {
+    hostContext = await callHostRPC('get_context', { history }, 15000);
+  } catch (e) {
+    console.warn('[Bản đồ con] Lấy ngữ cảnh thất bại:', e);
+    hostContext = null;
+  }
+  renderContextBanner();
+  // Khi có địa điểm mới nhất thì cố gắng đồng bộ node hiện tại (khớp thì được lợi, không khớp cũng không ảnh hưởng tracking click cục bộ)
+  calibrateCurrentNodeFromContext();
+  return hostContext;
+}
+
+function renderContextBanner() {
+  const loc = $('ctx-location');
+  if (!loc) return;
+  if (hostContext) {
+    const place = getHostPlace(hostContext) || '(Không rõ, AI sẽ suy luận theo cốt truyện)';
+    loc.innerHTML = `Địa điểm hiện tại:<span style="color:#e8dcc0;">${escHtml(place)}</span>`;
+  } else {
+    loc.innerHTML = `Địa điểm hiện tại:<span style="color:#ff8090;">Chưa kết nối với quán rượu (sẽ chỉ tạo dựa trên ghi chú bổ sung)</span>`;
+  }
+}
+
+// ==================== Gọi LLM (qua host proxy) ====================
+// genMode: 'world' (generateRaw + worldbook, không kèm preset — khuyến nghị, vừa có thiết lập vừa xuất JSON sạch)
+//          'clean' (generateRaw, không kèm gì cả, JSON ổn nhất nhưng thiếu thiết lập)
+//          'preset' (generate, mang cả preset + worldbook, có thể phá giới hạn nhưng dễ lẫn văn xuôi)
+let genMode = 'world';
+
+// Ghi lại phản hồi thô của từng bước để truy lỗi "tạo thất bại"
+let lastRawResponses = [];
+
+function logDebug(step, raw) {
+  const text = (raw == null ? '(phản hồi rỗng)' : String(raw));
+  lastRawResponses.push(`【${step}】\n${text}`);
+  console.log(`[Bộ tạo bản đồ con] ${step} phản hồi thô:`, raw);
+  const box = $('debug-box'), log = $('debug-log');
+  if (box && log) {
+    box.style.display = 'block';
+    log.textContent = lastRawResponses.join('\n\n──────────\n\n');
+  }
+}
+
+async function callLLM(systemPrompt, userPrompt) {
+  return await callHostRPC('llm', { systemPrompt, userPrompt, mode: genMode });
+}
+
+// ==================== Xây prompt SKILL ====================
+// Quy chuẩn lõi (dùng chung cho mọi bước), đồng bộ với dungeon_generator.md
+const COMMON_HEADER = `[TASK CHANGED] Vào chế độ phân tích: lần này tạm dừng nhập vai, không diễn giải bất kỳ cốt truyện nào.
+Lần trả lời này chỉ dành cho "nhiệm vụ tạo bản đồ con" bên dưới, nhằm tăng độ chính xác đầu ra.
+Nghiêm cấm xuất ra <think>、<content>、<now_plot>、<summary>、<update>、json_patch hay bất kỳ thẻ nào khác hoặc phần tường thuật.
+Chỉ xuất JSON nghiêm ngặt theo yêu cầu nhiệm vụ: ký tự đầu tiên phải là {, ký tự cuối cùng phải là }, ở giữa không được có giải thích, chú thích, khối mã markdown hoặc tiền/hậu tố.
+
+Bạn là trợ lý tạo bản đồ con TRPG. Chỉ xuất JSON nghiêm ngặt, không xuất bất kỳ giải thích, chú thích hay khối mã markdown nào.
+
+Thiết lập thế giới quan, hệ thống quái vật, đối chiếu sức mạnh cấp độ, từ ngữ cấm... hãy tham khảo worldbook đang kích hoạt.
+
+【Giá trị type của node — phân theo "vai trò chức năng", không phụ thuộc chủ đề địa điểm, dùng được cho mọi đề tài】
+Trước hết hãy nghĩ "node này trong quá trình thăm dò đang đóng vai trò gì", rồi chọn một trong tám loại phù hợp nhất dưới đây:
+- entrance: lối vào, điểm khởi đầu (người chơi từ đây bước vào khu vực này)
+- exit: lối ra, điểm kết thúc, nơi đi tiếp hành trình
+- hub: nút giao / thông lộ — khu chuyển tiếp hoặc khoảng không rộng nối nhiều đường (đại sảnh, trung đình, quảng trường, chỗ giao nhau của hành lang, ngã rẽ)
+- combat: nơi có thể bùng nổ chiến đấu, địch chiếm giữ, hoặc thủ lĩnh trấn giữ
+- stronghold: nơi do một phe kiểm soát, đồn trú, canh phòng nghiêm ngặt (doanh trại, trạm gác, tổng đà, phòng gác)
+- discovery: điểm đáng chú ý — manh mối, tường thuật, câu đố, kỳ ngộ, điểm phát hiện có thể tương tác (loại thông dụng nhất)
+- hazard: nguy địa — nơi chủ yếu nguy hiểm về môi trường như bẫy, cơ quan, độc chướng, sập đổ, mất ổn định
+- treasure: địa điểm trọng yếu — nơi cất giữ tài vật, vật tư chủ chốt, mục tiêu, kho báu
+Lưu ý: type mô tả "chức năng", không phải "hình thức địa điểm". Một gian nhã thất ở quán trà có thể là discovery, cũng có thể là combat; một gian chính trong cổ mộ có thể là treasure hoặc combat. Hãy chọn theo vai trò của nó trong lần khám phá này. Nếu không chắc thì dùng discovery.
+
+【Quy tắc đặt tên node (cực kỳ quan trọng)】
+Đặt tên giống cách con người ngoài đời gọi một nơi hằng ngày: ngắn, thẳng, nhìn là hiểu.
+
+Yêu cầu cứng:
+- Độ dài phải xen kẽ: chủ yếu 2-4 chữ, tên node trên toàn bản đồ bắt buộc có dài có ngắn, cấu trúc khác nhau; nghiêm cấm mọi node đều cùng số chữ hoặc cùng một kiểu cấu trúc.
+- Nhiều nhất chỉ mang một từ bổ nghĩa: chỉ cần kiểu "（bổ nghĩa）+ địa danh", ví dụ hậu bếp, giếng cũ, đông sương, cửa sau hỏng. Nghiêm cấm chồng hai ba tính từ lên nhau để đủ chữ.
+- Nói tiếng người, đừng chất từ ngữ hoa mỹ: các chi tiết không khí như vết rêu, nước đọng, mùi mốc hãy viết vào summary, đừng nhét vào tên.
+
+Ví dụ đặt tên tốt (chú ý độ dài và cấu trúc đều khác nhau):
+- Cổng chính, hậu bếp, giếng cũ, sân trời, hành lang gỗ, phòng củi, cửa sau
+- Đông sương thư phòng, cổng nửa sập, lối vào hầm rượu, hình phòng, ngăn bí mật
+
+Tên cấm:
+- Khoảng sân trời phủ rêu sinh sôi, giếng cũ rêu xanh trơn nhớt, hành lang gỗ bong sơn loang lổ, chân tường xanh sẫm rỉ nước (chồng tính từ để đủ chữ, tất cả cùng độ dài — tối kỵ)
+- Cảnh giới mờ ảo hư vô, đại sảnh giao thoa sáng tối (quá văn vẻ, hiếm và tối nghĩa)
+- Phòng số một, hành lang A, địa điểm 7 (không có thông tin)
+
+【Giới hạn cứng số lượng kết nối】
+- entrance / hub (lối vào / nút giao): tối đa 4 cạnh
+- Các loại còn lại (combat / stronghold / discovery / hazard / treasure / exit): tối đa 3 cạnh
+- entrance chỉ được làm source (không có cạnh đi vào)
+- exit chỉ được làm target (1-3 cạnh đi vào, không có cạnh đi ra)
+
+Cấu trúc cấm:
+- Phát xạ hình sao: một node nối với tất cả node còn lại
+- Mạng nhện: một node có hơn 4 cạnh
+- Nối thẳng toàn bộ: mọi node đều nối trực tiếp vào entrance
+- Tuyến tính thuần túy: A→B→C→D, không có nhánh nào
+
+Cấu trúc khuyến nghị:
+Lối vào → nút giao → phân nhánh (đường A: chiến đấu→manh mối→mật thất / đường B: câu đố→bẫy→kho báu) → hội tụ → đích
+
+【Nguyên tắc thiết kế】
+- Ưu tiên tính hình ảnh: mô tả node phải có chi tiết thị giác, âm thanh, mùi vị cụ thể
+- Phân tầng thông tin: summary là thứ người chơi nhìn thấy ngay khi bước vào; secrets là thứ chỉ phát hiện được qua kiểm định, điều tra, tương tác
+- Quy mô quái vật phải khớp: cấp quái vật nên nằm trong khoảng ±10 cấp so với người chơi
+- Tính liên tục: khi điền nội dung, nếu đã truyền tóm tắt node lân cận thì mô tả node mới phải tương ứng với nó
+- Nguyên tắc tiết chế (cực kỳ quan trọng): địa điểm bình thường thì cứ để nó bình thường. Ngoài đời đa số căn phòng chỉ là căn phòng, đa số quán trà chỉ là quán trà uống nước, không có ngăn bí, thư mật, phục kích hay âm mưu nào cả. Đừng vì muốn "trông như có chuyện" mà ép mọi node phải có bí mật ẩn. Không có thì cứ để trống, thà bình dị còn hơn bày ra âm mưu bừa bãi.`;
+
+const HISTORY_BLOCK = (history) => history ? `\n【Ngữ cảnh cốt truyện gần đây (nội dung tạo ra phải tương ứng và từ đó suy luận mục tiêu chuyến đi của người chơi)】\n${history}\n` : '';
+
+// Ghép khối mô tả "bối cảnh hiện tại" từ ngữ cảnh host + ghi chú bổ sung
+function buildContextBlock(ctx, note) {
+  const lines = [];
+  if (ctx) {
+    const place = getHostPlace(ctx);
+    if (place) lines.push(`Địa điểm hiện tại: ${place}`);
+    if (ctx.level) lines.push(`Cấp người chơi: ${ctx.level}`);
+    const profession = readFirstDefined(ctx, ['Nghề nghiệp', '\u804C\u4E1A']);
+    if (profession) lines.push(`Nghề nghiệp người chơi: ${profession}`);
+    const placeDetail = readFirstDefined(ctx, ['Thông tin địa điểm', '\u573A\u6240\u8BE6\u60C5']);
+    if (placeDetail) lines.push(`Thông tin địa điểm đã biết: ${placeDetail}`);
+  }
+  if (note && note.trim()) lines.push(`Yêu cầu bổ sung: ${note.trim()}`);
+  if (!lines.length) return '';
+  return `\n【Bối cảnh hiện tại (từ biến game)】\n${lines.join('\n')}\n`;
+}
+
+function getPlaceName(ctx, note) {
+  if (note) {
+    const m = note.match(/(?:\u573A\u6240|Địa điểm)[:：]\s*(.+)/);
+    if (m) return m[1].trim().slice(0, 20);
+  }
+  const place = getHostPlace(ctx);
+  if (place) return place;
+  return 'Địa điểm hiện tại';
+}
+
+function buildStructurePrompt({ ctx, note, size, history, includeHidden }) {
+  const contextBlock = buildContextBlock(ctx, note);
+  const place = getPlaceName(ctx, note);
+  const hiddenBlock = includeHidden ? `
+【Bổ sung: node easter egg ẩn (lần này bắt buộc thêm đúng 1 node)】
+- Ngoài ${size} node thông thường, hãy thêm đúng 1 node ẩn nữa và gắn trường "hidden": true vào đối tượng node đó.
+- Nó chỉ được nối với đúng 1 node thường (không được là entrance / exit), và chỉ có đúng 1 cạnh đó.
+- Nó là easter egg hiếm, ẩn ở chỗ không nổi bật và chỉ được phát hiện khi lục soát, thường cất nội dung phong phú hoặc đặc biệt hơn.
+- "Easter egg" này là gì do bạn tự quyết định dựa trên 【chủ đề và sắc thái của phụ bản này】 — cứ chọn thứ phù hợp nhất; bên dưới chỉ là ví dụ định hướng, tuyệt đối không được gán cứng hay chọn hết:
+  · Mật thất / bí tàng ẩn, nhân vật ẩn cư / bí khách, tế đàn bí mật hoặc cơ duyên di tích, hang ổ của hung thú ẩn giấu, kho báu do cơ quan canh giữ, điểm manh mối hé lộ bí mật... (cũng có thể là hình thức khác hợp đề tài hơn)
+- type hãy chọn loại khớp nhất với tính chất easter egg mà bạn đặt ra; việc đặt tên vẫn phải tuân thủ quy tắc đặt tên, nhưng đừng ghi thẳng các chữ như "ẩn / bí mật / tối" vào tên.
+` : '';
+  return `${COMMON_HEADER}
+
+【Nhiệm vụ: tạo một lần cấu trúc bản đồ — node + liên kết (bước 1)】
+Áp dụng chế độ ưu tiên tường thuật: kết hợp "bối cảnh hiện tại", "ngữ cảnh cốt truyện gần đây" và thiết lập của worldbook đang kích hoạt để tự suy luận mục tiêu chuyến đi của người chơi cùng cấu trúc không gian hợp lý của địa điểm này, thiết kế bố cục node và nối chúng bằng lối đi thành một bản đồ. Các node tường thuật quan trọng bắt buộc phải có, đồng thời chèn các node chuyển tiếp hợp lý ở giữa. Nếu thông tin chưa đủ, hãy bổ sung theo logic không gian thường thấy của loại địa điểm đó.
+${contextBlock}${HISTORY_BLOCK(history)}
+【Quy mô】Tổng cộng ${size} node
+${hiddenBlock}
+【Yêu cầu node】
+- Bắt buộc phải có node lối vào với id="entrance"
+- Bắt buộc phải có node lối ra với id="exit" (có thể là phòng Boss hoặc điểm kết thúc manh mối)
+- title dùng tên địa điểm ngắn gọn, cụ thể (tham khảo địa điểm hiện tại: ${place})
+- Đặt tên node phải cụ thể và giàu hình ảnh (tham khảo "Quy tắc đặt tên node")
+- Chọn type hợp lý (tham khảo "Giá trị type của node")
+
+【Yêu cầu kết nối】
+- Nghiêm túc tuân thủ giới hạn số cạnh trong mục "Giới hạn cứng số lượng kết nối"
+- Mọi node đều phải có thể đi tới từ entrance
+- Bắt buộc có đường nhánh, cấm tuyến tính thuần túy
+- entrance chỉ được làm source (không có cạnh đi vào)
+- exit chỉ được làm target (không có cạnh đi ra)
+- label mô tả đặc trưng của lối đi: bậc đá, cửa sắt, đường ngầm, tường vỡ, hành lang, khe nứt phủ dây leo... bằng các từ cụ thể
+
+【Giới hạn đầu ra】900 ký tự, giữ ngắn gọn
+
+【Định dạng đầu ra】
+{
+  "title": "${place}",
+  "nodes": [
+    {"id": "entrance", "name": "Cổng chính", "type": "entrance"},
+    {"id": "...", "name": "...", "type": "..."}${includeHidden ? `,
+    {"id": "secret_01", "name": "...", "type": "（tùy theo tính chất easter egg）", "hidden": true}` : ''}
+  ],
+  "edges": [
+    {"source": "entrance", "target": "...", "label": "bậc đá đi xuống"}
+  ]
+}`;
+}
+
+function buildFillPrompt({ title, ctx, note, history, level, batch, neighbors }) {
+  const contextBlock = buildContextBlock(ctx, note);
+  const neighborText = neighbors ? `\n【Tóm tắt node lân cận (giữ tính liên tục của tường thuật)】\n${neighbors}\n` : '';
+  const batchList = batch.map(n => `${n.id} | ${n.name} | ${n.type}${n.hidden ? ' | 【Easter egg ẩn】' : ''}`).join('\n');
+  const hiddenNames = batch.filter(n => n.hidden).map(n => n.name);
+  const hiddenBlock = hiddenNames.length ? `
+【Trường bổ sung discovery cho node easter egg ẩn (chỉ node đánh dấu 【Easter egg ẩn】 mới cần)】
+Lần này có node ẩn: ${hiddenNames.join('、')}. Nó là easter egg hiếm khớp với chủ đề của phụ bản này. Hãy xuất thêm trường "discovery" cho nó và viết rõ "cách phát hiện":
+- Bắt buộc phải neo vào node thường liền kề với nó — tức là sau khi người chơi đi tới node lân cận, phải làm gì và qua kiểm định nào mới phát hiện được nó.
+- Bắt buộc phải nêu rõ kiểm định DC (như "DC 16 cảm nhận, nhận ra ánh sáng mờ hắt ra sau đống củi" hoặc "DC 14 điều tra, khe tường giấu cơ quan cửa ngầm").
+- secrets của nó phải viết nội dung / phần thưởng / dị văn thực sự của easter egg (chỉ hé lộ sau khi phát hiện và bước vào), phải khớp với tính chất của nó và đủ có trọng lượng.
+- summary / hook cứ viết như thường (mô tả những gì thấy sau khi phát hiện), nhưng hook tuyệt đối không được spoil rằng nó là node ẩn.
+` : '';
+
+  return `${COMMON_HEADER}
+
+【Nhiệm vụ: điền nội dung cho toàn bộ node trong một lần (bước 2)】
+
+【Tên địa điểm】${title}
+${contextBlock}${HISTORY_BLOCK(history)}
+【Cấp người chơi】${level} cấp
+${neighborText}${hiddenBlock}
+【Node cần điền】
+${batchList}
+
+【Quy tắc điền】
+- summary: 50-80 ký tự, các chi tiết cảm quan mà người chơi nhìn thấy, không chứa thông tin ẩn
+- hook: 20-40 ký tự, là "gợi ý khám phá" cho người chơi — trong điều kiện không spoil, gợi ý nơi này đáng làm gì, có thể có gì. Xem chuyên mục bên dưới
+- monsters: Tên và đặc điểm cụ thể. Cấm các mô tả mơ hồ kiểu "một bầy quái vật" hay "vài tiểu yêu". Nếu không có thì để chuỗi rỗng
+- environmentFeatures: Vật thể có thể tương tác, cơ quan, đặc điểm dễ thấy
+- secrets: chỉ dành cho GM, chỉ điền khi node đó thật sự có nội dung ẩn; nếu không thì bắt buộc để chuỗi rỗng ""
+- Không phải node nào cũng bắt buộc có quái vật hoặc bí mật; với node bình thường, monsters và secrets đều có thể để trống
+
+【summary bắt buộc phải có】
+- Chi tiết thị giác: kiểu kiến trúc, bố trí đồ đạc, mức độ hư hại
+- Thính giác/khứu giác: tiếng nước, tiếng gió, mùi mốc, mùi máu
+- Bối cảnh công khai: truyền thuyết mà dân địa phương đều biết, những dấu vết nhìn thấy rõ
+- Không khí tổng thể: âm u / trang nghiêm / hỗn loạn / hoang vắng
+
+【summary nghiêm cấm chứa】
+- Bất kỳ kiểm định DC nào (như "DC 15 quan sát...")
+- Bẫy ẩn, cơ quan, phục kích
+- Manh mối chỉ phát hiện được khi kiểm định
+- Vị trí ẩn hoặc chiến thuật của quái vật
+
+【Nguyên tắc điền secrets — tiết chế + đa dạng (quan trọng)】
+secrets là phát hiện ngầm của GM chỉ được hé lộ khi "người chơi chủ động khám phá nơi này", tuyệt đối không chỉ giới hạn ở âm mưu, bẫy hay kho báu, cũng không buộc vào một loại bối cảnh duy nhất. Đây là mọi loại thu hoạch mà việc khám phá địa điểm này có thể đem lại, từ "không có gì" đến "phát hiện lớn" trên toàn dải (phân loại định hướng, dùng chung cho mọi chủ đề):
+- Không thu được gì / chỉ là đồ lặt vặt thường ngày (phổ biến nhất, để trống hoặc lướt qua bằng một câu bình dị)
+- Các cảnh tượng, kỳ quan, dấu vết, chi tiết thú vị mang đúng không khí chủ đề
+- Tài vật / tài nguyên / tiếp tế / vật liệu có thể dùng
+- Vật kỳ quái không rõ lai lịch, câu đố, cơ quan
+- Manh mối tình báo: thư mật, mảnh bản đồ, chữ khắc, lời chứng kiến, truyền miệng
+- Gặp gỡ nhân vật hoặc sinh vật (thân phận cụ thể do bối cảnh quyết định, xem bên dưới)
+- Nguy hiểm: bẫy, phục kích, độc, sập đổ, thực thể thù địch
+- Kích hoạt cốt truyện: khớp với worldbook / các sự kiện liên quan chưa được mở trong biến
+
+【Quan trọng: hình thái nội dung phải do "chủ đề của bối cảnh này" quyết định; cùng một loại phát hiện nhưng ở các phụ bản khác nhau sẽ có diện mạo hoàn toàn khác】
+- Quán trà chốn phường phố → 
+  - Lời càu nhàu của nho sinh bàn bên, chuyện lạ của người kể chuyện, ấm trà ngon chủ quán giấu riêng, hay tin nhắn nhờ người quen mang tới
+  - Không thu được gì / chỉ là đồ cũ lặt vặt bình thường (phổ biến nhất, đa số địa điểm thường là như vậy, để trống hoặc lướt qua bằng một câu bình dị là đủ)
+  - Chuyện lạ, chuyện dân gian, tin đồn góc tường, những chi tiết nhỏ nhặt nhưng có vị
+  - Gặp gỡ nhân vật ngẫu nhiên: đụng phải người quen, gặp mỹ nhân, thu hút sự chú ý của người khác, hoặc một nhân vật ngồi bàn bên không liên quan đến tuyến chính (khách giang hồ / mạo hiểm giả cùng nghề / lái buôn rong / quan lại cải trang / nho sinh sa cơ... tùy thế giới quan)
+- Manh mối thật sự, thư mật, ngăn bí mật, cơ quan, bẫy, phục kích, cú bẻ lái cốt truyện, kho báu (đây chỉ là một trong nhiều khả năng, không phải mặc định)
+- Phế tích cổ mộ → đồ tuẫn táng trong quan tài, chữ khắc trên tường, đường hầm sập, oan linh canh mộ
+- Doanh trại địch / mỏ quặng → khe hở lúc đổi ca tuần tra, đồng đội bị bắt, đống quân khí, thuốc nổ chỉ chực phát cháy
+- Sào huyệt yêu thú → xương bị gặm còn sót, trứng chưa nở, con mồi sống sót, mẫu thú có thể về tổ bất cứ lúc nào
+(Phần trên chỉ minh họa "cách biến phân loại trừu tượng thành chủ đề cụ thể", cấm chép nguyên xi)
+
+Trình tự cốt lõi:
+1. Mô phỏng thực tế: trước tiên hãy nghĩ "ngay lúc này địa điểm cụ thể này khả năng cao sẽ có gì". Địa điểm bình thường thì cứ để nó bình thường; không có gì thì mạnh dạn để trống, tuyệt đối không gượng ép chỉ để "trông như có câu chuyện".
+2. Khớp với sắc thái chủ đề: trước hết khóa chủ đề của phụ bản/địa điểm này (phường phố, cổ mộ, chiến trận, bí cảnh, sào huyệt yêu thú...); nội dung phải bám chặt chủ đề đó, đừng nhét các cuộc gặp gỡ xã giao vào phụ bản hiểm nguy, cũng đừng nhét sát khí vào quán trà yên bình.
+3. Trên tiền đề hai điều trên đã thỏa, secrets của toàn bản đồ càng đa dạng càng tốt — tránh toàn bộ đều là âm mưu, cũng tránh mỗi node đều là cùng một kiểu gặp gỡ.
+Tất cả phân loại và ví dụ ở trên chỉ là định hướng; AI bắt buộc phải kết hợp worldbook hiện tại, địa điểm, phe phái, cốt truyện và trạng thái người chơi để sinh ra phù hợp bối cảnh, nghiêm cấm chép máy móc.
+
+【Cách viết secrets】
+- Có liên quan đến cơ quan/bẫy/vật ẩn: nêu rõ kiểm định và điều kiện kích hoạt, sát thương hoặc hậu quả (ví dụ "DC 13 điều tra phát hiện ngăn bí dưới đáy tủ, bên trong có một phong thư mật")
+- Gặp gỡ nhân vật/sinh vật: chỉ rõ thân phận, mục đích hoặc mối đe dọa, chỉ cần đưa cho AI chính một mồi câu đủ để triển khai, không cần chốt cứng kết cục
+- Nếu không có nội dung: điền chuỗi rỗng ""
+
+【Cách viết hook (gợi ý khám phá) — chiếc "móc câu" cho người chơi, không spoil nhưng chỉ ra điểm đáng xem (quan trọng)】
+hook là câu duy nhất trong chi tiết node trực tiếp gợi người chơi "có nên khám phá chỗ này hay không". Chỉ nhìn summary thì người chơi thường không biết node này dùng để làm gì; hook sinh ra để bù đúng mảnh đó.
+- Bắt buộc phản ánh trung thực nội dung thật của node đó, tuyệt đối không bịa thêm:
+  · Có secrets: dùng cách diễn đạt giàu cảm quan, để lại độ bí ẩn, gợi xiên rằng "nơi này có điều bất thường, đáng để xem xét", nhưng tuyệt đối không nói toạc ra là gì. Ví dụ: 「Tên phục vụ sau quầy thỉnh thoảng lại liếc vào trong, dường như không muốn ai đến gần tấm rèm kia.」
+  · Có quái vật / chiến đấu: nhấn mạnh sự nguy hiểm và cảm giác hiện diện của đối thủ, không báo chỉ số hay chiến thuật cụ thể. Ví dụ: 「Từ xà nhà vọng xuống tiếng móng cào sột soạt, trong bóng tối có thứ gì đó đang nhìn chằm chằm người bước vào.」
+  · Có kho báu / tài nguyên: ám chỉ có thứ đáng lấy, không nói rõ giá trị cụ thể. Ví dụ: 「Lớp bụi trên chiếc rương ở góc rất mỏng, như thể gần đây có ai đó đã chạm vào.」
+  · Thật sự bình thường: hãy đánh giá bình thản, đúng sự thật (để người chơi biết "chỗ này có lẽ chẳng có gì" cũng là thông tin hữu ích), hoặc để trống "". Ví dụ: 「Chỉ là một gian giường chung bình thường, không thấy có gì đặc biệt.」 Tuyệt đối không vì câu khách mà cố tạo cảm giác bí ẩn.
+- Nghiêm cấm xuất hiện: DC, kiểm định, kết quả cơ quan, số lượng/cấp độ quái vật, nội dung cụ thể của secrets và mọi thông tin cơ chế hay spoil khác.
+- Phong cách: một câu thôi, giàu hình ảnh, khẩu ngữ, như một người đồng hành cẩn thận đang ghé tai nhắc bạn khe khẽ.
+
+Giới hạn đầu ra: mỗi batch 700 ký tự.
+
+【Định dạng đầu ra】
+{
+  "rooms": [
+    {
+      "id": "node-id",
+      "summary": "...",
+      "hook": "...",
+      "monsters": "...",
+      "environmentFeatures": "...",
+      "secrets": "...",
+      "discovery": "（Chỉ node easter egg ẩn mới cần: tại node liền kề phải qua kiểm định DC nào để phát hiện nó）"
+    }
+  ]
+}`;
+}
+
+// ==================== Kiểm chứng và sửa chữa ====================
+function validateConnectivity(nodes, edges) {
+  const adj = {};
+  edges.forEach(e => {
+    (adj[e.source] = adj[e.source] || []).push(e.target);
+    (adj[e.target] = adj[e.target] || []).push(e.source);
+  });
+  const visited = new Set();
+  const queue = ['entrance'];
+  while (queue.length) {
+    const id = queue.shift();
+    if (visited.has(id)) continue;
+    visited.add(id);
+    (adj[id] || []).forEach(next => queue.push(next));
+  }
+  return nodes.filter(n => !visited.has(n.id));
+}
+
+function repairIsolated(edges, isolated, allNodes) {
+  isolated.forEach(node => {
+    const target = allNodes.find(n => n.id !== node.id && !isolated.find(i => i.id === n.id));
+    if (target) edges.push({ source: node.id, target: target.id, label: 'lối đi' });
+  });
+}
+
+// Hậu xử lý node ẩn: quyền quyết định nằm ở code.
+// - Không trúng (!want): xóa toàn bộ dấu hidden do model tự thêm, xử lý như node thường.
+// - Trúng: giữ tối đa 1 hidden; tìm một node thường liền kề làm "node cha" (parentId);
+//   nếu không tìm được node thường liền kề thì hạ xuống node thường (nếu không nó sẽ không bao giờ được phát hiện). Ban đầu revealed=false.
+function finalizeHiddenNodes(nodes, edges, want) {
+  let hiddenList = nodes.filter(n => n.hidden === true);
+  if (!want) { hiddenList.forEach(n => { delete n.hidden; }); return; }
+  // Chỉ giữ node đầu tiên
+  hiddenList.slice(1).forEach(n => { delete n.hidden; });
+  const hidden = hiddenList[0];
+  if (!hidden) return;
+  const byId = {}; nodes.forEach(n => { byId[n.id] = n; });
+  let parentId = null;
+  for (const e of edges) {
+    if (e.source === hidden.id && byId[e.target] && !byId[e.target].hidden && e.target !== 'entrance' && e.target !== 'exit') { parentId = e.target; break; }
+    if (e.target === hidden.id && byId[e.source] && !byId[e.source].hidden && e.source !== 'entrance' && e.source !== 'exit') { parentId = e.source; break; }
+  }
+  // Lùi một bước: cho phép entrance/exit làm node cha
+  if (!parentId) {
+    for (const e of edges) {
+      if (e.source === hidden.id && byId[e.target] && !byId[e.target].hidden) { parentId = e.target; break; }
+      if (e.target === hidden.id && byId[e.source] && !byId[e.source].hidden) { parentId = e.source; break; }
+    }
+  }
+  if (!parentId) { delete hidden.hidden; return; }   // Không có node thường liền kề -> hạ cấp
+  hidden.parentId = parentId;
+  hidden.revealed = false;
+  if (byId[parentId]) placeHiddenNearParent(hidden, byId[parentId], nodes);
+}
+
+// Đặt node ẩn vào vị trí "áp sát node cha, lệch ra phía ngoài bản đồ" — không dùng luôn ô mà layout theo tầng đã cấp cho nó.
+// (Nếu dùng sẽ làm "?" bay sang ô không liên quan tới node cha, gây lệch vị trí). Lúc render cũng tính lại một lần nữa để sửa luôn ảnh cũ trong cache.
+function placeHiddenNearParent(hidden, parentNode, nodes) {
+  const vis = nodes.filter(m => m !== hidden && !(m.hidden && !m.revealed));
+  const k = vis.length || 1;
+  const cx = vis.reduce((s, m) => s + (m.x || 0), 0) / k;
+  const cy = vis.reduce((s, m) => s + (m.y || 0), 0) / k;
+  let dx = (parentNode.x || 0) - cx, dy = (parentNode.y || 0) - cy;
+  let len = Math.hypot(dx, dy);
+  if (len < 1) { dx = 0; dy = 1; len = 1; }   // Node cha đúng ở giữa -> mặc định hướng xuống
+  hidden.x = (parentNode.x || 0) + (dx / len) * 120;
+  hidden.y = (parentNode.y || 0) + (dy / len) * 120;
+}
+
+function filterValidEdges(nodes, edges) {
+  const ids = new Set(nodes.map(n => n.id));
+  return edges.filter(e => ids.has(e.source) && ids.has(e.target));
+}
+
+function assignCoordinates(nodes, edges) {
+  const adj = {};
+  edges.forEach(e => (adj[e.source] = adj[e.source] || []).push(e.target));
+  const visited = new Set(['entrance']);
+  const layers = [['entrance']];
+  let current = ['entrance'];
+  while (current.length) {
+    const next = [];
+    current.forEach(id => (adj[id] || []).forEach(t => {
+      if (!visited.has(t)) { visited.add(t); next.push(t); }
+    }));
+    if (next.length) layers.push(next);
+    current = next;
+  }
+  const covered = new Set(layers.flat());
+  const remaining = nodes.filter(n => !covered.has(n.id)).map(n => n.id);
+  if (remaining.length) layers.push(remaining);
+
+  const LAYER_GAP = 130, NODE_GAP = 130;
+  layers.forEach((layer, depth) => {
+    const offset = (layer.length - 1) * NODE_GAP / 2;
+    layer.forEach((id, idx) => {
+      const node = nodes.find(n => n.id === id);
+      if (node) { node.x = idx * NODE_GAP - offset; node.y = depth * LAYER_GAP - 200; }
+    });
+  });
+}
+
+function getNeighborSummaries(batchIds, edges, completed) {
+  const set = new Set(batchIds);
+  const neighbors = new Set();
+  edges.forEach(e => {
+    if (set.has(e.source) && !set.has(e.target)) neighbors.add(e.target);
+    if (set.has(e.target) && !set.has(e.source)) neighbors.add(e.source);
+  });
+  return [...neighbors]
+    .filter(id => completed[id]?.summary)
+    .map(id => `${id}: ${completed[id].summary.slice(0, 60)}`)
+    .join('\n');
+}
+
+// ==================== Luồng tạo chính ====================
+async function generate() {
+  const size = parseInt($('f-size').value);
+  const note = $('f-note').value.trim();
+  genMode = $('f-mode').value || 'world';
+  lastRawResponses = [];
+
+  const btn = $('generate-btn');
+  btn.disabled = true;
+  $('actions').classList.remove('active');
+
+  try {
+    // ===== Bước 0: lấy ngữ cảnh cốt truyện từ host =====
+    setProgress(5, 'Đang đọc ngữ cảnh cốt truyện hiện tại...');
+    const ctx = await loadHostContext();
+    const history = ctx ? ctx.history : '';
+    const level = (ctx && ctx.level) || 30;
+
+    // ===== Step 0.5: Xóa mục worldbook Bản đồ phụ bản cũ =====
+    // Phải xóa trước khi gọi LLM: khi tạo kèm worldbook, nếu "Bản đồ phụ bản" cũ vẫn còn thì AI sẽ nhìn thấy và chép theo.
+    setProgress(8, 'Đang xóa bản đồ phụ bản trước...');
+    try {
+      await callHostRPC('delete_worldbook', { entryNames: ['Bản đồ phụ bản', 'Bản đồ phụ bản·GM bí mật'] }, 20000);
+    } catch (e) {
+      console.warn('[Bản đồ con] Xóa mục Bản đồ phụ bản cũ thất bại (bỏ qua, tiếp tục tạo):', e);
+    }
+
+    // ===== Bước 1: tạo cấu trúc một lần (node + liên kết) =====
+    // Xúc xắc easter egg: chỉ khi trúng mới yêu cầu AI thêm node ẩn (quyền quyết định ở code, không ở AI); easter egg là gì thì để AI tự chọn theo đề tài.
+    const includeHidden = Math.random() < HIDDEN_NODE_CHANCE;
+    setProgress(15, 'Bước 1/2: tạo cấu trúc bản đồ (node + liên kết)...');
+    const structPrompt = buildStructurePrompt({ ctx, note, size, history, includeHidden });
+    let structResp = await callLLM(structPrompt, 'Tạo cấu trúc bản đồ.');
+    logDebug('Bước 1 · cấu trúc', structResp);
+    let structData = safeParseJson(structResp, 'nodes');
+    if (!structData?.nodes?.length) {
+      // Thử lại một lần
+      setProgress(20, 'Phân tích cấu trúc thất bại, thử lại một lần...');
+      structResp = await callLLM(structPrompt, 'Chỉ xuất JSON nghiêm ngặt, không thêm bất kỳ giải thích hay văn xuôi nào.');
+      logDebug('Bước 1 · cấu trúc (thử lại)', structResp);
+      structData = safeParseJson(structResp, 'nodes');
+      if (!structData?.nodes?.length) {
+        throw new Error('Tạo cấu trúc thất bại: không thể phân tích JSON từ phản hồi. Mở phần "Gỡ lỗi" bên dưới để xem nội dung mô hình trả về (thường là có văn xuôi hoặc bị cắt).');
+      }
+    }
+    const nodes = structData.nodes.map(n => ({ ...n, x: 0, y: 0 }));
+    const title = structData.title || getPlaceName(ctx, note);
+
+    // Liên kết: ưu tiên lấy edges trong cấu trúc lần này; nếu không phân tích được thì fallback tuyến tính
+    let edges = Array.isArray(structData.edges) ? structData.edges : [];
+    if (!edges.length) {
+      console.warn('[Bộ tạo bản đồ con] Cấu trúc không có kết nối, dùng phương án tuyến tính dự phòng');
+      for (let i = 0; i < nodes.length - 1; i++) {
+        edges.push({ source: nodes[i].id, target: nodes[i+1].id, label: 'lối đi' });
+      }
+    }
+
+    edges = filterValidEdges(nodes, edges);
+    const isolated = validateConnectivity(nodes, edges);
+    if (isolated.length) repairIsolated(edges, isolated, nodes);
+    assignCoordinates(nodes, edges);
+
+    // Hậu xử lý node ẩn (phía code): nếu không trúng thì xóa mọi dấu hidden; nếu trúng thì chỉ giữ 1 node,
+    // rồi tính "node cha" cho nó (node thường liền kề, người chơi tới đây mới thấy "?"), khởi tạo revealed=false.
+    finalizeHiddenNodes(nodes, edges, includeHidden);
+
+    // ===== Bước 2: điền toàn bộ node một lần (một API call) =====
+    setProgress(55, 'Bước 2/2: điền nội dung cho toàn bộ node...');
+    let fillFailures = 0;
+    const fillPrompt = buildFillPrompt({
+      title, ctx, note, history, level,
+      batch: nodes, neighbors: ''
+    });
+    try {
+      const fillResp = await callLLM(fillPrompt, 'Điền toàn bộ nội dung node trong một lần.');
+      logDebug('Bước 2 · điền nội dung (toàn bộ)', fillResp);
+      const fillData = safeParseJson(fillResp, 'rooms');
+      if (fillData?.rooms) {
+        fillData.rooms.forEach(r => {
+          const node = nodes.find(n => n.id === r.id);
+          if (node) {
+            node.summary = r.summary || '';
+            node.hook = r.hook || '';
+            node.monsters = r.monsters || '';
+            node.environmentFeatures = r.environmentFeatures || '';
+            node.secrets = r.secrets || '';
+            if (node.hidden) node.discovery = r.discovery || '';
+          }
+        });
+      } else {
+        fillFailures = nodes.length;
+      }
+    } catch (e) {
+      fillFailures = nodes.length;
+      logDebug('Bước 2 · điền nội dung (toàn bộ) lỗi', (e && e.message) || e);
+      // Fallback: tiếp tục với mô tả rỗng, ít nhất giữ lại cấu trúc bản đồ
+      nodes.forEach(n => {
+        n.summary = ''; n.hook = ''; n.monsters = ''; n.environmentFeatures = ''; n.secrets = '';
+      });
+    }
+
+    // ===== Hoàn tất =====
+    currentMapData = { title, nodes, edges };
+    saveMapCache();   // ghi vào cache cục bộ, có thể khôi phục sau khi refresh/chuyển tab
+    const warn = fillFailures ? `(nội dung node chưa phân tích thành công, có thể mở gỡ lỗi để xem)` : '';
+    setProgress(100, `Tạo xong:${nodes.length}  node, ${edges.length}  liên kết${warn}`);
+    $('actions').classList.add('active');
+    renderMap();
+
+    // Tự động ghi entry worldbook "Bản đồ phụ bản"
+    try {
+      const res = await writeDungeonToWorldbook();
+      setProgress(100, `Đã ghi vào worldbook「${res?.worldbookName || ''}」· Bản đồ phụ bản${warn}`);
+      showToast('Đã ghi vào worldbook「Bản đồ phụ bản」', 'success');
+    } catch (e) {
+      console.warn('[Bản đồ con] Ghi worldbook thất bại:', e);
+      showToast('Ghi worldbook thất bại:' + (e.message || e), 'error');
+    }
+
+    // Sau khi tạo thành công, tự động thu gọn panel trình tạo
+    setPanelCollapsed(true);
+
+    // Khi trúng easter egg, đưa một gợi ý kín đáo (không nói node nào) để người chơi biết bản đồ này không bình thường
+    if (currentMapData.nodes.some(n => n.hidden && !n.revealed)) {
+      setTimeout(() => showToast('✦ Phụ bản lần này dường như có điều bí ẩn……', 'success'), 900);
+    }
+  } catch (e) {
+    console.error(e);
+    setProgress(0, 'Tạo thất bại:' + e.message, true);
+    // Khi thất bại thì tự động mở panel gỡ lỗi để tiện xem phản hồi thực của model
+    const box = $('debug-box'), log = $('debug-log'), caret = $('debug-caret');
+    if (box && log && lastRawResponses.length) {
+      box.style.display = 'block';
+      log.style.display = 'block';
+      if (caret) caret.textContent = 'Thu gọn ▲';
+    }
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ==================== Render bản đồ ====================
+function renderMap() {
+  if (!currentMapData) return;
+  emptyState.style.display = 'none';
+  container.style.display = 'block';
+
+  // Tự động căn giữa
+  const { nodes } = currentMapData;
+  const xs = nodes.map(n => n.x), ys = nodes.map(n => n.y);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  viewX = -cx;
+  viewY = -cy;
+
+  renderNodes();
+  renderEdges();
+}
+
+function worldToScreen(wx, wy) {
+  const cx = container.clientWidth / 2;
+  const cy = container.clientHeight / 2;
+  return { x: cx + (wx + viewX) * scale, y: cy + (wy + viewY) * scale };
+}
+
+function renderNodes() {
+  nodeLayer.innerHTML = '';
+  nodeElements = [];
+  const curId = currentMapData.currentNodeId;
+  currentMapData.nodes.forEach(n => {
+    // Node ẩn chưa reveal: bình thường không vẽ; chỉ khi người chơi đang ở node cha của nó thì mới hiện dấu giữ chỗ "?" để thăm dò
+    if (n.hidden && !n.revealed) {
+      if (curId && n.parentId === curId) {
+        // Mỗi lần render đều tính lại vị trí "?" theo node cha: sửa lệch của ảnh cũ trong cache, đồng thời dùng cùng tọa độ với nét đứt bên dưới
+        const parentNode = currentMapData.nodes.find(p => p.id === n.parentId);
+        if (parentNode) placeHiddenNearParent(n, parentNode, currentMapData.nodes);
+        const wrapper = document.createElement('div');
+        wrapper.className = 'node-wrapper mystery';
+        const icon = document.createElement('div');
+        icon.className = 'node-icon';
+        icon.innerHTML = `<span class="node-disc" style="--nc:#b18cff; box-shadow:0 2px 6px rgba(0,0,0,0.5), inset 0 0 5px rgba(0,0,0,0.45);"><span class="node-q">?</span></span>`;
+        wrapper.appendChild(icon);
+        const badge = document.createElement('div');
+        badge.className = 'node-mystery-badge';
+        badge.textContent = '？ Có thể thăm dò';
+        wrapper.appendChild(badge);
+        wrapper.addEventListener('click', e => { e.stopPropagation(); openMysteryDetail(n); });
+        nodeLayer.appendChild(wrapper);
+        nodeElements.push({ el: wrapper, node: n });
+      }
+      return;
+    }
+    const cfg = typeConfig[resolveType(n.type)];
+    const wrapper = document.createElement('div');
+    wrapper.className = 'node-wrapper';
+    const icon = document.createElement('div');
+    icon.className = 'node-icon';
+    icon.innerHTML = `<span class="node-disc" style="--nc:${cfg.color}; box-shadow:0 2px 6px rgba(0,0,0,0.5), inset 0 0 5px rgba(0,0,0,0.45);">
+      <iconify-icon icon="${cfg.icon || 'game-icons:magnifying-glass'}" noobserver style="font-size:${ICON_SIZE}px;"></iconify-icon>
+    </span>`;
+    wrapper.appendChild(icon);
+    const label = document.createElement('div');
+    label.className = 'node-label';
+    label.textContent = n.name;
+    wrapper.appendChild(label);
+    if (curId && n.id === curId) {
+      wrapper.classList.add('current');
+      const here = document.createElement('div');
+      here.className = 'node-here-badge';
+      here.textContent = 'Bạn ở đây';
+      wrapper.appendChild(here);
+    }
+    wrapper.addEventListener('click', e => { e.stopPropagation(); activeDetailNode = n; openDetail(n); });
+    nodeLayer.appendChild(wrapper);
+    nodeElements.push({ el: wrapper, node: n });
+  });
+  updatePositions();
+  updateSecretHint();
+}
+
+// Gợi ý kín đáo: chỉ cần bản đồ còn "easter egg ẩn chưa bị phát hiện" thì hiển thị một banner nhỏ ở đầu bản đồ,
+// để người chơi biết bản đồ này không bình thường, nhưng tuyệt đối không tiết lộ node nào — buộc người chơi tự khám phá từng nơi. Sau khi phát hiện thì tự biến mất.
+function updateSecretHint() {
+  const el = $('secret-hint');
+  if (!el) return;
+  const has = !!(currentMapData && Array.isArray(currentMapData.nodes)
+    && currentMapData.nodes.some(n => n.hidden && !n.revealed));
+  el.style.display = has ? 'block' : 'none';
+}
+
+// Đặt làm vị trí hiện tại: khi bấm "Khám phá nơi này", cục bộ sẽ lập tức highlight (đáng tin cậy, không phụ thuộc), rồi lưu vào cache
+function setCurrentNode(nodeId, { persist = true } = {}) {
+  if (!currentMapData || !nodeId) return;
+  if (!currentMapData.nodes.some(n => n.id === nodeId)) return;
+  if (currentMapData.currentNodeId === nodeId) return;
+  currentMapData.currentNodeId = nodeId;
+  if (persist) saveMapCache();
+  if (container.style.display !== 'none') renderNodes();
+}
+
+// Cố gắng dùng trường "Địa điểm" của host để hiệu chỉnh node hiện tại:
+// Tách địa điểm theo · / ・ rồi trim, lấy đoạn cuối so khớp chính xác với tên node.
+//   Có dấu phân tách và khớp một node -> ghi đè phán đoán cục bộ;
+//   Chỉ có tên công trình (không có dấu phân tách) hoặc đoạn cuối không khớp -> xem như còn ở lối vào/chưa vào node, giữ tracking click cục bộ.
+function calibrateCurrentNodeFromContext() {
+  if (!currentMapData || !hostContext) return;
+  const place = getHostPlace(hostContext) || '';
+  if (!place) return;
+  const segs = String(place).split(/[·・]/).map(s => s.trim()).filter(Boolean);
+  if (segs.length < 2) return;            // Không có dấu phân tách -> còn ở toàn bộ công trình/lối vào, không ghi đè
+  const last = segs[segs.length - 1];
+  const matched = currentMapData.nodes.find(n => n.name === last);
+  if (matched) {
+    // Lưới an toàn: nếu người chơi thực tế đã ở node ẩn (địa điểm khớp nó), tự reveal để tránh "người ở đó nhưng bản đồ không hiện"
+    if (matched.hidden && !matched.revealed) { matched.revealed = true; saveMapCache(); }
+    setCurrentNode(matched.id);
+  }
+}
+
+function updatePositions() {
+  nodeElements.forEach(({ el, node }) => {
+    const p = worldToScreen(node.x, node.y);
+    el.style.left = p.x + 'px';
+    el.style.top = p.y + 'px';
+  });
+}
+
+function renderEdges() {
+  canvas.width = container.clientWidth;
+  canvas.height = container.clientHeight;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const nodeMap = {};
+  currentMapData.nodes.forEach(n => nodeMap[n.id] = n);
+  const curId = currentMapData.currentNodeId;
+  currentMapData.edges.forEach(e => {
+    const from = nodeMap[e.source], to = nodeMap[e.target];
+    if (!from || !to) return;
+    // Cạnh chạm tới "node ẩn chưa reveal": bình thường không vẽ; khi người chơi ở node cha thì vẽ một đường nét đứt tím chỉ tới "?"
+    const pending = (from.hidden && !from.revealed) ? from : (to.hidden && !to.revealed) ? to : null;
+    const p1 = worldToScreen(from.x, from.y);
+    const p2 = worldToScreen(to.x, to.y);
+    if (pending) {
+      if (curId == null || pending.parentId !== curId) return;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(177,140,255,0.6)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    ctx.strokeStyle = 'rgba(200,184,138,0.3)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.stroke();
+  });
+}
+
+// ==================== Panel chi tiết ====================
+function openDetail(node) {
+  activeMysteryNode = null;
+  $('detail-explore-btn').style.display = '';
+  $('detail-copy-btn').style.display = '';
+  $('detail-discover-btn').style.display = 'none';
+  const cfg = typeConfig[resolveType(node.type)];
+  $('detail-header').innerHTML = `
+    <div class="detail-title">${escHtml(node.name)}</div>
+    <span class="detail-badge">${cfg.label}</span>
+  `;
+  $('detail-summary').textContent = node.summary || '(không có mô tả)';
+  let bodyHtml = '';
+  if (node.hook && String(node.hook).trim()) {
+    bodyHtml += `<div class="detail-hook"><span class="detail-hook-tag">Gợi ý khám phá</span>${escHtml(node.hook)}</div>`;
+  }
+  for (const [key, label] of Object.entries(FIELD_LABELS)) {
+    const val = node[key];
+    if (!val || !String(val).trim()) continue;
+    bodyHtml += `<div class="detail-section">
+      <div class="detail-section-title">${label}</div>
+      <div class="detail-section-content">${escHtml(val)}</div>
+    </div>`;
+  }
+  $('detail-body').innerHTML = bodyHtml;
+  $('detail-overlay').classList.add('active');
+}
+
+// Chi tiết của dấu giữ chỗ "?": chỉ đưa lối thăm dò, tuyệt đối không lộ thân phận/nội dung thật của node ẩn.
+// Lưu ý: việc có hé lộ hay không do AI chính trong chat phán định (theo điều kiện phát hiện trong entry GM bí mật); bản đồ không ném xúc xắc, không tự reveal.
+function openMysteryDetail(hiddenNode) {
+  activeMysteryNode = hiddenNode;
+  activeDetailNode = null;
+  $('detail-explore-btn').style.display = 'none';
+  $('detail-copy-btn').style.display = 'none';
+  const btn = $('detail-discover-btn');
+  btn.style.display = '';
+  btn.textContent = 'Thăm dò nơi này';
+  $('detail-header').innerHTML = `
+    <div class="detail-title">? Có điều khả nghi</div>
+    <span class="detail-badge">Chưa rõ</span>
+  `;
+  $('detail-summary').textContent = 'Bạn dừng lại quan sát, luôn cảm thấy quanh đây còn giấu thứ gì đó. Có muốn lục soát kỹ một phen không?';
+  $('detail-body').innerHTML = `<div class="detail-hook"><span class="detail-hook-tag">Manh mối</span>Xung quanh dường như còn ẩn huyền cơ. Bấm "Thăm dò nơi này" sẽ khiến bạn tìm kiếm ngay tại chỗ; có phát hiện được hay không thì còn tùy vận may và nhãn lực.</div>`;
+  $('detail-overlay').classList.add('active');
+}
+
+// Thăm dò: bản đồ không phán định, không reveal, chỉ gửi một "chỉ lệnh tìm kiếm" vào chat.
+// AI chính trong chat sẽ dựa vào điều kiện phát hiện khu vực ẩn trong worldbook để kiểm định và quyết định có hé lộ cho người chơi hay không —
+// Như vậy dù người chơi bấm "?" trên bản đồ hay tự tìm kiếm trong đối thoại, đều dùng cùng một bộ quy tắc và không thể spam click để ép hiện.
+// Việc node ẩn có hiện trên bản đồ hay không thống nhất do hiệu chỉnh "Địa điểm" điều khiển (sau khi AI hé lộ và dẫn người chơi vào, Địa điểm khớp nó thì nó sẽ hiện).
+async function requestDiscovery(hiddenNode) {
+  if (!hiddenNode || !currentMapData) return;
+  const parent = currentMapData.nodes.find(n => n.id === hiddenNode.parentId);
+  const parentName = parent ? parent.name : 'nơi này';
+  $('detail-overlay').classList.remove('active');
+  const text = `Lục soát kỹ xung quanh tại「${parentName}」`;
+  try {
+    const ok = await tavernSendMessage(text);
+    if (!ok) throw new Error('Ghi thất bại');
+    showToast('Đã gửi lệnh tìm kiếm, chờ phán định', 'success');
+  } catch (e) {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('Cầu nối với quán rượu không khả dụng, đã sao chép lệnh tìm kiếm, vui lòng dán thủ công', 'success');
+    } catch {
+      showToast('Gửi thất bại: ' + (e.message || e), 'error');
+    }
+  }
+}
+
+$('detail-close').addEventListener('click', () => $('detail-overlay').classList.remove('active'));
+$('detail-overlay').addEventListener('click', e => { if (e.target.id === 'detail-overlay') $('detail-overlay').classList.remove('active'); });
+
+// ==================== Kéo và phóng to/thu nhỏ ====================
+function stopDragging() {
+  isDragging = false;
+  activePointerId = null;
+  container.classList.remove('grabbing');
+}
+
+container.addEventListener('pointerdown', e => {
+  if (!e.isPrimary) return;
+  if (e.target.closest('.node-wrapper')) return;
+  isDragging = true;
+  activePointerId = e.pointerId;
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+  dragViewX = viewX;
+  dragViewY = viewY;
+  container.classList.add('grabbing');
+  if (typeof container.setPointerCapture === 'function') {
+    try { container.setPointerCapture(e.pointerId); } catch (err) {}
+  }
+});
+container.addEventListener('pointermove', e => {
+  if (!isDragging || activePointerId !== e.pointerId) return;
+  viewX = dragViewX + (e.clientX - dragStartX) / scale;
+  viewY = dragViewY + (e.clientY - dragStartY) / scale;
+  updatePositions(); renderEdges();
+});
+container.addEventListener('pointerup', e => {
+  if (activePointerId !== e.pointerId) return;
+  stopDragging();
+});
+container.addEventListener('pointercancel', e => {
+  if (activePointerId !== e.pointerId) return;
+  stopDragging();
+});
+container.addEventListener('lostpointercapture', () => {
+  stopDragging();
+});
+container.addEventListener('wheel', e => {
+  e.preventDefault();
+  scale = Math.max(0.3, Math.min(3, scale * (e.deltaY > 0 ? 0.9 : 1.1)));
+  updatePositions(); renderEdges();
+}, { passive: false });
+window.addEventListener('resize', () => { if (currentMapData) { renderNodes(); renderEdges(); } });
+
+// Lắng nghe thay đổi kích thước chính của container bản đồ: thu gọn/mở rộng panel trình tạo bên trái sẽ đổi độ rộng vùng bản đồ (và có animation chuyển tiếp 0.28s),
+// kiểu thay đổi layout flex này không kích hoạt event resize của window. Dùng ResizeObserver để bám theo theo thời gian thực,
+// trong lúc animation chạy sẽ có callback liên tục, nhờ đó node và đường nối có thể định vị lại mượt mà.
+if (window.ResizeObserver) {
+  let _rszRaf = 0;
+  const _ro = new ResizeObserver(() => {
+    if (!currentMapData) return;
+    if (_rszRaf) return;
+    _rszRaf = requestAnimationFrame(() => {
+      _rszRaf = 0;
+      updatePositions();
+      renderEdges();
+    });
+  });
+  _ro.observe($('map-area'));
+}
+
+// ==================== Xuất dữ liệu ====================
+// Sinh text dễ đọc cho entry "Bản đồ phụ bản" (người chơi thấy/tổng quan): cấu trúc + tóm tắt công khai, không chứa bí mật GM
+function buildWorldbookPublicText() {
+  if (!currentMapData) return '';
+  const { title, nodes, edges } = currentMapData;
+  const nodeMap = {};
+  nodes.forEach(n => { nodeMap[n.id] = n; });
+  const typeName = t => typeConfig[resolveType(t)].label;
+  // Node ẩn chưa hé lộ không thuộc bản đồ người chơi thấy, loại toàn bộ (kể cả cạnh của nó và phần nó xuất hiện trong danh sách liền kề của node khác)
+  const isVisible = n => !!n && !(n.hidden && !n.revealed);
+
+  // Bảng liền kề (hai chiều): tên các node nối trực tiếp với từng node — AI chính dựa vào đây để phán định "có thể tới trong một bước hay không",
+  // đồng thời thay thế trực quan cho danh sách "lối đi" cũ (treo thẳng "từ đây đi đâu được" dưới từng node).
+  const adj = {};
+  nodes.forEach(n => { if (isVisible(n)) adj[n.id] = []; });
+  edges.forEach(e => {
+    const a = nodeMap[e.source], b = nodeMap[e.target];
+    if (!isVisible(a) || !isVisible(b)) return;
+    adj[e.source].push(b.name);
+    adj[e.target].push(a.name);
+  });
+
+  let s = `【Bản đồ phụ bản hiện tại: ${title}】\n`;
+  s += `AI chính sẽ dựa vào đó để mô tả bối cảnh và ràng buộc việc di chuyển của người chơi trong phụ bản.\n\n`;
+  s += `## Quy tắc di chuyển\n`;
+  s += `- Node hiện tại của người chơi = đoạn cuối của trường "Địa điểm": khi Địa điểm là「${title}${NODE_SEP}Tên node」, Tên node chính là vị trí hiện tại; nếu Địa điểm chỉ tới「${title}」thì nghĩa là còn ở lối vào, chưa bước vào node nào.\n`;
+  s += `- Người chơi chỉ có thể di chuyển tới các node được liệt kê là "có thể đi tới từ node hiện tại" (xem ở cuối mỗi node bên dưới), không thể dịch chuyển tức thời tới node không liền kề.\n`;
+  s += `- Nếu nơi muốn đi không liền kề: trước hết hãy di chuyển tới node lân cận gần nhất dẫn tới mục tiêu, rồi tiến từng node một; các đoạn đi qua Chiến đấu, Nguy địa... phải được triển khai trung thực, không được bỏ qua hay né tránh.\n`;
+  s += `- Sau khi vị trí người chơi thay đổi, hãy cập nhật "Địa điểm" thành「${title}${NODE_SEP}Tên node mới」(tên node lấy từ danh sách bên dưới).\n\n`;
+  s += `## Node\n`;
+  nodes.forEach(n => {
+    if (!isVisible(n)) return;
+    s += `■ ${n.name} (${typeName(n.type)})\n`;
+    if (n.summary) s += `  Tóm tắt: ${n.summary}\n`;
+    if (n.hook) s += `  Điểm xem: ${n.hook}\n`;
+    if (n.monsters) s += `  Quái vật: ${n.monsters}\n`;
+    if (n.environmentFeatures) s += `  Môi trường: ${n.environmentFeatures}\n`;
+    const nb = [...new Set(adj[n.id] || [])];
+    s += `  Có thể đi tới từ node lân cận: ${nb.length ? nb.join(', ') : '(không có)'}\n`;
+  });
+  return s.trim();
+}
+
+// Sinh text dễ đọc cho entry "Bản đồ phụ bản·GM bí mật": chỉ chứa node có cơ mật; nếu toàn bản đồ không có cơ mật thì trả về đoạn giải thích
+function buildWorldbookSecretText() {
+  if (!currentMapData) return '';
+  const { title, nodes } = currentMapData;
+  const typeName = t => typeConfig[resolveType(t)].label;
+  const hiddenPending = nodes.filter(n => n.hidden && !n.revealed);
+  const withSecrets = nodes.filter(n => !(n.hidden && !n.revealed) && n.secrets && String(n.secrets).trim());
+
+  let s = `【Bản đồ phụ bản·GM bí mật: ${title}】\n`;
+  s += `Dưới đây là thông tin ẩn chỉ dành cho GM. Chỉ khi người chơi thật sự khám phá tới node tương ứng và vượt qua kiểm định/điều tra/tương tác thì mới được hé lộ; tuyệt đối không chủ động spoil.\n\n`;
+
+  if (hiddenPending.length) {
+    s += `## Khu vực ẩn (easter egg — trước khi bị phát hiện thì tuyệt đối không chủ động nhắc tới, cũng không ám chỉ nó tồn tại)\n`;
+    s += `Quy tắc phán định (GM toàn quyền nắm giữ): chỉ khi người chơi đang ở node liền kề với khu vực ẩn bên dưới và thực hiện hành động lục soát, hãy dựa trên "điều kiện phát hiện" của nó để tiến hành một lần kiểm định; chỉ khi vượt qua mới hé lộ khu vực đó và cho phép đi tới, nếu thất bại thì mô tả trung thực là "không thấy gì bất thường". Có hé lộ hay không, hé lộ khi nào, hoàn toàn do bạn căn cứ kiểm định và tình huống để quyết định; khi người chơi chưa chủ động lục soát thì không được chủ động tiết lộ.\n`;
+    s += `Lót không khí (tùy chọn): khi người chơi mới vào phụ bản này, bạn có thể dùng một câu miêu tả môi trường để ám chỉ kín đáo rằng "nơi này dường như có gì đó khả nghi", khơi gợi ham muốn khám phá, nhưng tuyệt đối không được nói rõ ở node nào, cũng không được xác nhận khu vực ẩn thật sự tồn tại.\n`;
+    hiddenPending.forEach(h => {
+      const parent = nodes.find(n => n.id === h.parentId);
+      const parentName = parent ? parent.name : 'một node liền kề nào đó';
+      s += `■ ${h.name} (ẩn · ${typeName(h.type)})\n`;
+      s += `  · Vị trí: không nằm trên bản đồ người chơi thấy, nằm liền kề với「${parentName}」.\n`;
+      s += `  · Điều kiện phát hiện: khi người chơi lục soát tại「${parentName}」, tiến hành kiểm định — ${h.discovery || 'DC 15 Cảm nhận hoặc Điều tra'}.\n`;
+      if (h.summary) s += `  · Cảnh thấy sau khi phát hiện: ${h.summary}\n`;
+      if (h.secrets) s += `  · Thu hoạch bên trong: ${h.secrets}\n`;
+    });
+    s += `\n`;
+  }
+
+  if (withSecrets.length) {
+    s += `## Bí mật của node\n`;
+    withSecrets.forEach(n => {
+      s += `■ ${n.name} (${typeName(n.type)})\n`;
+      s += `  · Bí mật GM: ${n.secrets}\n`;
+    });
+  }
+
+  if (!hiddenPending.length && !withSecrets.length) {
+    s += `(Các node của phụ bản này đều không có bí mật đặc biệt, cứ xử lý như địa điểm bình thường là được.)`;
+  }
+  return s.trim();
+}
+
+// Ghi phụ bản vào worldbook: tách thành hai entry "Bản đồ phụ bản" (tổng quan người chơi thấy) và "Bản đồ phụ bản·GM bí mật"
+// Keyword bật entry:
+//   - Entry tổng quan: Bản đồ phụ bản + tiêu đề + tên từng node (nhắc tới bản đồ hoặc bất kỳ node nào đều load)
+//   - Entry cơ mật: chỉ tên từng node (chỉ khi người chơi thật sự "khám phá xxx" vào node thì mới load, tránh lộ cơ mật quá sớm)
+async function writeDungeonToWorldbook() {
+  const data = currentMapData;
+  if (!data || !Array.isArray(data.nodes) || !data.nodes.length) {
+    throw new Error('Không có nội dung phụ bản để ghi');
+  }
+  const nodeNames = data.nodes.map(n => n.name).filter(Boolean);
+  // Keyword người chơi thấy được: loại tên "node ẩn chưa reveal" (nó không nên xuất hiện trong entry công khai và không nên kích hoạt entry công khai)
+  const publicNodeNames = data.nodes.filter(n => !(n.hidden && !n.revealed)).map(n => n.name).filter(Boolean);
+  const publicKeywords = [...new Set(['Bản đồ phụ bản', data.title, ...publicNodeNames].filter(Boolean))];
+  const secretKeywords = [...new Set(nodeNames)];
+
+  // 1) Entry tổng quan người chơi thấy được
+  const res = await callHostRPC('save_worldbook', {
+    entryName: 'Bản đồ phụ bản',
+    title: data.title,
+    content: buildWorldbookPublicText(),
+    keywords: publicKeywords
+  }, 20000);
+
+  // 2) Entry GM bí mật (luôn ghi; nếu toàn bản đồ không có cơ mật thì ghi đoạn giữ chỗ để bảo đảm không sót cơ mật từ bản đồ trước)
+  await callHostRPC('save_worldbook', {
+    entryName: 'Bản đồ phụ bản·GM bí mật',
+    title: data.title,
+    content: buildWorldbookSecretText(),
+    keywords: secretKeywords.length ? secretKeywords : ['Bản đồ phụ bản']
+  }, 20000);
+
+  return res;
+}
+
+// ==================== Thu gọn/mở rộng panel form ====================
+function setPanelCollapsed(collapsed) {
+  const panel = $('form-panel');
+  const toggle = $('panel-toggle');
+  if (panel) panel.classList.toggle('collapsed', !!collapsed);
+  if (toggle) toggle.style.display = collapsed ? 'flex' : 'none';
+}
+
+// ==================== Cache cục bộ (giữ bản đồ đã tạo sau refresh/chuyển tab cho tới lần tạo kế tiếp ghi đè) ====================
+const MAP_CACHE_KEY = 'dungeon_map_last_v1';
+
+function saveMapCache() {
+  try {
+    if (currentMapData) localStorage.setItem(MAP_CACHE_KEY, JSON.stringify(currentMapData));
+  } catch (e) { /* Bỏ qua khi ở chế độ riêng tư/vượt hạn mức */ }
+}
+
+function loadMapCache() {
+  try {
+    const raw = localStorage.getItem(MAP_CACHE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (!data || !Array.isArray(data.nodes) || !data.nodes.length) return false;
+    currentMapData = data;
+    $('actions').classList.add('active');
+    renderMap();
+    return true;
+  } catch (e) { return false; }
+}
+
+// Ghi lại thủ công entry worldbook "Bản đồ phụ bản"
+async function rewriteWorldbookManually() {
+  if (!currentMapData) { showToast('Hiện không có bản đồ nào để ghi', 'error'); return; }
+  try {
+    const res = await writeDungeonToWorldbook();
+    showToast(`Đã ghi vào worldbook「Bản đồ phụ bản」（${res?.worldbookName || ''}）`, 'success');
+  } catch (e) {
+    showToast('Ghi worldbook thất bại:' + (e.message || e), 'error');
+  }
+}
+
+// Xóa entry Bản đồ phụ bản trong worldbook (gồm cả entry GM bí mật)
+async function deleteWorldbookManually() {
+  if (!confirm('Bạn có chắc muốn xóa hai mục worldbook 「Bản đồ phụ bản」 và 「Bản đồ phụ bản·GM bí mật」 không?\nThao tác này không ảnh hưởng đến bản đồ trên khung vẽ hiện tại.')) return;
+  try {
+    const res = await callHostRPC('delete_worldbook', { entryNames: ['Bản đồ phụ bản', 'Bản đồ phụ bản·GM bí mật'] }, 20000);
+    if (res?.removed > 0) showToast(`Đã xóa ${res.removed} mục worldbook`, 'success');
+    else showToast('Không tìm thấy mục Bản đồ phụ bản trong worldbook', '');
+  } catch (e) {
+    showToast('Xóa thất bại: ' + (e.message || e), 'error');
+  }
+}
+
+$('generate-btn').addEventListener('click', generate);
+$('ctx-refresh').addEventListener('click', () => { loadHostContext(); });
+
+// Thu gọn/mở rộng panel trình tạo
+$('panel-collapse').addEventListener('click', () => setPanelCollapsed(true));
+$('panel-toggle').addEventListener('click', () => setPanelCollapsed(false));
+
+// Mở/thu gọn panel gỡ lỗi
+$('debug-toggle').addEventListener('click', () => {
+  const log = $('debug-log'), caret = $('debug-caret');
+  const open = log.style.display === 'block';
+  log.style.display = open ? 'none' : 'block';
+  if (caret) caret.textContent = open ? 'Mở ▼' : 'Thu gọn ▲';
+});
+
+// Khi khởi động: nếu có bản đồ trong cache thì khôi phục và thu gọn form, nếu không thì mở trình tạo
+(function restoreOnLoad() {
+  if (loadMapCache()) {
+    // loadMapCache đã khôi phục currentMapData và render
+    setPanelCollapsed(true);
+    setTimeout(() => { if (currentMapData) renderMap(); }, 320);  // đợi animation thu gọn kết thúc rồi căn giữa lại
+  } else {
+    setPanelCollapsed(false);
+  }
+})();
+
+// Sau khi trang tải, thử kéo ngữ cảnh cốt truyện một lần (có hiệu lực khi nhúng trong quán rượu)
+loadHostContext();
+
+// ==================== Cầu nối quán rượu ====================
+let activeDetailNode = null;
+let activeMysteryNode = null;
+
+function showToast(msg, type = '') {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'show' + (type ? ' ' + type : '');
+  setTimeout(() => { t.className = ''; }, 2200);
+}
+
+// Ghi text vào ô chat quán rượu qua host proxy (không tự động gửi)
+async function tavernSendMessage(text) {
+  return await callHostRPC('send_message', { text }, 15000);
+}
+
+// Khi người chơi bấm node rồi chọn "Khám phá nơi này": ghi một chỉ lệnh khám phá rõ ràng vào ô chat quán rượu (không tự động gửi),
+// để người chơi tự xác nhận rồi bấm gửi. Text cố định là:
+//   Khám phá {tên node} (hãy cập nhật Địa điểm thành "{title}·{tên node}")
+// — Tên node đặt ở đầu để vẫn kích hoạt keyword worldbook "Bản đồ phụ bản/GM bí mật";
+//   chỉ lệnh rõ ràng buộc AI chính ghi "công trình·node" vào Địa điểm, các lần di chuyển bằng text sau đó cũng dùng định dạng này.
+// Tên công trình gốc luôn lấy currentMapData.title (đã cố định khi tạo), luôn chỉ có một tầng ·, không dài ra theo Địa điểm.
+// Lưu ý: khi bấm thì KHÔNG highlight cục bộ vị trí hiện tại — vị trí lấy "Địa điểm" do AI chính cập nhật làm nguồn duy nhất.
+// Sau khi AI trả lời, trang sẽ render lại và gọi loadHostContext -> calibrateCurrentNodeFromContext,
+// khi đó mới dựa vào đoạn cuối của "Địa điểm" để khớp tên node và highlight node hiện tại.
+async function exploreNode(node) {
+  if (!node || !currentMapData) return;
+  const base = (currentMapData.title || '').trim();
+  const placePath = base ? `${base}${NODE_SEP}${node.name}` : node.name;
+  const text = `Thử di chuyển tới ${node.name} và khám phá`;
+  try {
+    const ok = await tavernSendMessage(text);
+    if (!ok) throw new Error('Ghi thất bại');
+    showToast(`Đã điền 「Khám phá ${node.name}」`, 'success');
+  } catch (e) {
+    // Fallback: sao chép vào clipboard và nhắc dán thủ công
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(`Cầu nối với quán rượu không khả dụng, đã sao chép lệnh khám phá, vui lòng dán thủ công`, 'success');
+    } catch {
+      showToast('Ghi thất bại: ' + (e.message || e), 'error');
+    }
+  }
+  $('detail-overlay').classList.remove('active');
+}
+
+// Sao chép mô tả node
+async function copyNodeDesc(node) {
+  if (!node) return;
+  const lines = [
+    `# ${node.name}`,
+    node.summary || '',
+    node.hook ? `\n[Gợi ý khám phá] ${node.hook}` : '',
+    node.monsters ? `\n[Quái vật] ${node.monsters}` : '',
+    node.environmentFeatures ? `\n[Môi trường] ${node.environmentFeatures}` : '',
+    node.secrets ? `\n[GM] ${node.secrets}` : ''
+  ].filter(Boolean);
+  try {
+    await navigator.clipboard.writeText(lines.join('\n'));
+    showToast('Đã sao chép mô tả node', 'success');
+  } catch {
+    showToast('Sao chép thất bại', 'error');
+  }
+}
+
+// Sửa openDetail để ghi nhận node hiện tại
+// activeDetailNode đã được đặt trong click handler của renderNodes
+nodeLayer.addEventListener('click', () => {}, true);
+
+// Ghi lại sự kiện nút
+$('apply-btn').addEventListener('click', rewriteWorldbookManually);
+$('delete-btn').addEventListener('click', deleteWorldbookManually);
+$('detail-explore-btn').addEventListener('click', () => exploreNode(activeDetailNode));
+$('detail-copy-btn').addEventListener('click', () => copyNodeDesc(activeDetailNode));
+$('detail-discover-btn').addEventListener('click', () => requestDiscovery(activeMysteryNode));
+</script>
+</body>
+</html>

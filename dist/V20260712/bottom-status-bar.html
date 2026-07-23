@@ -11355,7 +11355,10 @@ ${CHARACTER_PROFILE_FORMAT_SAMPLE.trim()}
       };
 
       // ==================== Hàm render ====================
-      const amberMapDebugUrl = './amber_sword_worldmap.html';
+      const STATUSBAR_CDN_BASE_URL = 'https://cdn.jsdelivr.net/gh/abcxyzeric/Hanh-lang-sang-the@main/dist/V20260712/';
+      const STATUSBAR_MAP_ASSET_VERSION = '20260723-review-map-fix-1';
+      const statusbarAssetUrl = (fileName, version = STATUSBAR_MAP_ASSET_VERSION) => `${STATUSBAR_CDN_BASE_URL}${fileName}?v=${version}`;
+      const amberMapDebugUrl = statusbarAssetUrl('amber_sword_worldmap.html');
       let _amberMapEmbedSrcdoc = '';
       let _amberMapHydratedUrl = '';
       let _amberMapHydratingUrl = '';
@@ -11379,9 +11382,9 @@ ${CHARACTER_PROFILE_FORMAT_SAMPLE.trim()}
       };
 
       // \u5927\u660E\u5FD7\u5F02（\u4E24\u4EAC\u4E5D\u5DDE）\u5730\u56FE\u5730\u5740：\u53EF\u7531 query \u53C2\u6570 damingMapUrl \u6216\u5168\u5C40 DAMING_MAP_EMBED_URL \u8986\u76D6
-      const damingMapDebugUrl = './jiuzhou_map_v1_5.html?v=1';
-      const dragonMapDebugUrl = './dragon_map.html?v=airp20260711_6';
-      const dungeonMapDebugUrl = './dungeon_map_v1_19.html?v=1';
+      const damingMapDebugUrl = statusbarAssetUrl('jiuzhou_map_v1_5.html');
+      const dragonMapDebugUrl = statusbarAssetUrl('dragon_map.html', `airp20260711_6-${STATUSBAR_MAP_ASSET_VERSION}`);
+      const dungeonMapDebugUrl = statusbarAssetUrl('dungeon_map_v1_19.html');
       let _dungeonMapEmbedSrcdoc = '';
       let _dungeonMapHydratedUrl = '';
       let _dungeonMapHydratingUrl = '';
@@ -11649,7 +11652,7 @@ ${CHARACTER_PROFILE_FORMAT_SAMPLE.trim()}
         if (worldview === 'Đồ Long và Đô Thị Thường Nhật') {
           return buildAmberMapEmbedUrl(resolveDragonMapBaseUrl());
         }
-        return './map.html?v=10';
+        return statusbarAssetUrl('map.html');
       };
 
       const renderStatusBar = (data) => {
